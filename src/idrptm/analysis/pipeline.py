@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -19,6 +20,7 @@ from idrptm.analysis.ree import ree_timeseries
 from idrptm.analysis.rg import rg_timeseries
 from idrptm.analysis.scaling import fit_flory_exponent, internal_distance_scaling
 from idrptm.schema import AnalysisConfig, WorkflowConfig, load_config
+from idrptm.units import analysis_output_units, summary_units, write_units_metadata
 
 
 @dataclass(frozen=True)
@@ -37,6 +39,7 @@ def analyze_run_directory(
     config_path: str | Path | None = None,
     topology: str | Path | None = None,
     trajectory: str | Path | None = None,
+    trajectory_reader: Literal["mdtraj", "mdanalysis"] = "mdtraj",
     output_dir: str | Path | None = None,
 ) -> AnalysisResult:
     """Load a CALVADOS run directory and write analysis outputs."""
@@ -45,7 +48,12 @@ def analyze_run_directory(
     if workflow is None and config_path is not None:
         workflow = load_config(config_path)
     analysis_config = workflow.analysis if workflow is not None else AnalysisConfig()
-    data = load_calvados_trajectory(run_dir, topology=topology, trajectory=trajectory)
+    data = load_calvados_trajectory(
+        run_dir,
+        topology=topology,
+        trajectory=trajectory,
+        engine=trajectory_reader,
+    )
     root = Path(output_dir) if output_dir is not None else Path(run_dir) / "analysis"
     return analyze_trajectory_data(data, output_dir=root, analysis_config=analysis_config)
 
@@ -69,12 +77,20 @@ def analyze_trajectory_data(
     rg = rg_timeseries(positions)
     rg_table = frame_data.copy()
     rg_table["rg"] = rg
-    outputs["timeseries_rg"] = _write_parquet(rg_table, output_path / "timeseries_rg.parquet")
+    outputs["timeseries_rg"] = _write_parquet(
+        rg_table,
+        output_path / "timeseries_rg.parquet",
+        output_name="timeseries_rg",
+    )
 
     ree = ree_timeseries(positions)
     ree_table = frame_data.copy()
     ree_table["ree"] = ree
-    outputs["timeseries_ree"] = _write_parquet(ree_table, output_path / "timeseries_ree.parquet")
+    outputs["timeseries_ree"] = _write_parquet(
+        ree_table,
+        output_path / "timeseries_ree.parquet",
+        output_name="timeseries_ree",
+    )
 
     contact_map = contact_map_from_positions(
         positions,
@@ -83,13 +99,18 @@ def analyze_trajectory_data(
     )
     contact_map_path = output_path / "contact_map.npy"
     np.save(contact_map_path, contact_map)
+    write_units_metadata(contact_map_path, analysis_output_units("contact_map"))
     outputs["contact_map"] = contact_map_path
 
     ps_table = p_of_s(contact_map)
-    outputs["ps"] = _write_parquet(ps_table, output_path / "ps.parquet")
+    outputs["ps"] = _write_parquet(ps_table, output_path / "ps.parquet", output_name="ps")
 
     scaling = internal_distance_scaling(positions)
-    outputs["scaling"] = _write_parquet(scaling, output_path / "scaling.parquet")
+    outputs["scaling"] = _write_parquet(
+        scaling,
+        output_path / "scaling.parquet",
+        output_name="scaling",
+    )
 
     flory_fit = None
     if len(scaling) >= 2:
@@ -103,6 +124,7 @@ def analyze_trajectory_data(
         outputs["msd"] = _write_parquet(
             com_msd(positions, max_lag=config.max_lag),
             output_path / "msd.parquet",
+            output_name="msd",
         )
 
     if "lifetime" in enabled or "contact_lifetime" in enabled:
@@ -114,6 +136,7 @@ def analyze_trajectory_data(
         outputs["contact_lifetime"] = _write_parquet(
             contact_lifetime(contact_states, max_lag=config.max_lag),
             output_path / "contact_lifetime.parquet",
+            output_name="contact_lifetime",
         )
 
     summary_path = output_path / "summary.json"
@@ -144,7 +167,9 @@ def _frame_table(trajectory: TrajectoryData) -> pd.DataFrame:
     return table
 
 
-def _write_parquet(table: pd.DataFrame, path: Path) -> Path:
+def _write_parquet(table: pd.DataFrame, path: Path, *, output_name: str) -> Path:
+    units = analysis_output_units(output_name)
+    table.attrs["units"] = units
     try:
         table.to_parquet(path, index=False)
     except ImportError as exc:
@@ -152,6 +177,7 @@ def _write_parquet(table: pd.DataFrame, path: Path) -> Path:
             "Writing parquet outputs requires pyarrow or fastparquet. "
             "Install the declared idr-ptm-md dependencies."
         ) from exc
+    write_units_metadata(path, units)
     return path
 
 
@@ -185,8 +211,14 @@ def _summary(
         "topology_path": str(trajectory.topology_path),
         "trajectory_path": str(trajectory.trajectory_path),
         "length_unit": trajectory.length_unit,
+        "input_position_unit": trajectory.input_position_unit,
+        "canonical_position_unit": trajectory.canonical_position_unit,
         "n_frames": trajectory.n_frames,
         "n_residues": trajectory.n_residues,
+        "units": summary_units(
+            input_position_unit=trajectory.input_position_unit,
+            canonical_position_unit=trajectory.canonical_position_unit,
+        ),
         "analysis": {
             "observables": analysis_config.observables,
             "contact_cutoff_nm": analysis_config.contact_cutoff_nm,

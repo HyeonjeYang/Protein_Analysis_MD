@@ -98,6 +98,15 @@ and `trajectory.dcd`, unless explicit paths are supplied with `--topology` and
 `contact_map.npy`, `ps.parquet`, `scaling.parquet`, optional `msd.parquet`,
 optional `contact_lifetime.parquet`, and `summary.json`.
 
+Internal analysis units are explicit: coordinates and distance observables are
+stored in nm, timestep metadata in ps, report times in ns, energies in kJ/mol,
+temperature in K, ionic strength in M, charge in elementary charge, mass in amu,
+MSD in nm^2, and contact probabilities/P(s) as dimensionless values. Each
+analysis artifact is accompanied by a `*.units.json` sidecar, and every
+`summary.json` contains a `units` block. The MDAnalysis trajectory reader
+converts Angstrom coordinates to nm before analysis and records both the input
+and canonical coordinate units.
+
 `idrptm compare PROJECT_DIR` detects the WT condition by name and compares each
 PTM condition against WT. It writes scalar summaries, aggregate P(s), delta P(s),
 condition-average contact maps, and delta contact maps under `comparison/`.

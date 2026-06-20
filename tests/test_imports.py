@@ -20,6 +20,7 @@ def test_stage_1_modules_import() -> None:
         "idrptm.calvados_adapter",
         "idrptm.runner",
         "idrptm.hpc",
+        "idrptm.units",
         "idrptm.analysis.io",
         "idrptm.analysis.rg",
         "idrptm.analysis.ree",

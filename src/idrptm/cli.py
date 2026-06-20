@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal, cast
 
 import typer
 
@@ -25,6 +25,7 @@ ConfigOption = Annotated[
     Path | None,
     typer.Option("--config", "-c", help="Workflow YAML configuration file."),
 ]
+TrajectoryReader = Literal["mdtraj", "mdanalysis"]
 
 
 @app.callback()
@@ -162,15 +163,25 @@ def analyze_command(
             help="Analysis output directory. Defaults to RUN_DIR/analysis.",
         ),
     ] = None,
+    trajectory_reader: Annotated[
+        str,
+        typer.Option(
+            "--trajectory-reader",
+            help="Trajectory reader backend: mdtraj or mdanalysis.",
+        ),
+    ] = "mdtraj",
 ) -> None:
     """Analyze a prepared CALVADOS trajectory."""
 
     try:
+        if trajectory_reader not in {"mdtraj", "mdanalysis"}:
+            raise ValueError("Trajectory reader must be 'mdtraj' or 'mdanalysis'.")
         result = analyze_run_directory(
             run_dir,
             config_path=config,
             topology=topology,
             trajectory=trajectory,
+            trajectory_reader=cast(TrajectoryReader, trajectory_reader),
             output_dir=output_dir,
         )
     except Exception as exc:

@@ -62,13 +62,13 @@ def generate_report(project_dir: str | Path, output_dir: str | Path | None = Non
     ree_distribution = _distribution_table(runs, "ree", "ree")
     figure_paths.extend(
         save_figure(
-            plot_distribution(rg_distribution, "rg", "Rg", "Rg distribution"),
+            plot_distribution(rg_distribution, "rg", "Rg (nm)", "Rg distribution"),
             figures / "rg_distribution",
         )
     )
     figure_paths.extend(
         save_figure(
-            plot_distribution(ree_distribution, "ree", "Ree", "Ree distribution"),
+            plot_distribution(ree_distribution, "ree", "Ree (nm)", "Ree distribution"),
             figures / "ree_distribution",
         )
     )
@@ -78,7 +78,7 @@ def generate_report(project_dir: str | Path, output_dir: str | Path | None = Non
             plot_matrix(
                 comparison.map_means[comparison.wt_condition],
                 f"Contact map: {comparison.wt_condition}",
-                "Contact probability",
+                "Contact probability (dimensionless)",
             ),
             figures / "contact_map_wt",
         )
@@ -89,7 +89,7 @@ def generate_report(project_dir: str | Path, output_dir: str | Path | None = Non
                 plot_matrix(
                     comparison.map_means[condition],
                     f"Contact map: {condition}",
-                    "Contact probability",
+                    "Contact probability (dimensionless)",
                 ),
                 figures / f"contact_map_{_slug(condition)}",
             )
@@ -105,13 +105,25 @@ def generate_report(project_dir: str | Path, output_dir: str | Path | None = Non
     scaling_aggregate = _scaling_aggregate(runs)
     figure_paths.extend(
         save_figure(
-            plot_lines(ps_aggregate, "s", "p_mean", "P(s)", "Contact probability P(s)"),
+            plot_lines(
+                ps_aggregate,
+                "s",
+                "p_mean",
+                "P(s) (dimensionless)",
+                "Contact probability P(s)",
+            ),
             figures / "ps",
         )
     )
     figure_paths.extend(
         save_figure(
-            plot_lines(scaling_aggregate, "s", "distance_mean", "R(s)", "Internal distance R(s)"),
+            plot_lines(
+                scaling_aggregate,
+                "s",
+                "distance_mean",
+                "R(s) (nm)",
+                "Internal distance R(s)",
+            ),
             figures / "rs",
         )
     )

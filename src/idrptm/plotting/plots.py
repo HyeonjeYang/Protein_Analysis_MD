@@ -50,6 +50,7 @@ def plot_distribution(
             alpha=0.65,
         )
     ax.set_ylabel(ylabel)
+    ax.set_xlabel("Condition")
     ax.set_title(title)
     ax.tick_params(axis="x", rotation=30)
     return fig
@@ -60,8 +61,8 @@ def plot_matrix(matrix: np.ndarray, title: str, label: str, cmap: str = "viridis
 
     fig, ax = plt.subplots(figsize=(5, 4.5))
     image = ax.imshow(matrix, origin="lower", cmap=cmap)
-    ax.set_xlabel("Residue index")
-    ax.set_ylabel("Residue index")
+    ax.set_xlabel("Residue index (residue)")
+    ax.set_ylabel("Residue index (residue)")
     ax.set_title(title)
     fig.colorbar(image, ax=ax, label=label)
     return fig
@@ -74,10 +75,10 @@ def plot_delta_matrix(matrix: np.ndarray, title: str) -> plt.Figure:
     vmax = vmax or 1.0
     fig, ax = plt.subplots(figsize=(5, 4.5))
     image = ax.imshow(matrix, origin="lower", cmap="coolwarm", vmin=-vmax, vmax=vmax)
-    ax.set_xlabel("Residue index")
-    ax.set_ylabel("Residue index")
+    ax.set_xlabel("Residue index (residue)")
+    ax.set_ylabel("Residue index (residue)")
     ax.set_title(title)
-    fig.colorbar(image, ax=ax, label="Delta contact probability")
+    fig.colorbar(image, ax=ax, label="Delta contact probability (dimensionless)")
     return fig
 
 
@@ -93,7 +94,7 @@ def plot_lines(
     fig, ax = plt.subplots(figsize=(5.5, 4))
     for condition, group in table.groupby("condition", sort=True):
         ax.plot(group[x], group[y], marker="o", label=condition)
-    ax.set_xlabel(x)
+    ax.set_xlabel(_axis_label(x))
     ax.set_ylabel(ylabel)
     ax.set_title(title)
     ax.legend(frameon=False)
@@ -113,7 +114,7 @@ def plot_ptm_sites(manifest: pd.DataFrame) -> plt.Figure:
         ax.hlines(row_index, 1, max(length, 1), color="0.85", linewidth=4)
         for site in _parse_ptm_sites(str(row.get("ptm_sites_1based", ""))):
             ax.scatter(site, row_index, color="tab:red", s=45, zorder=3)
-    ax.set_xlabel("Biological residue position")
+    ax.set_xlabel("Biological residue position (residue)")
     ax.set_yticks(range(len(ytick_labels)), ytick_labels)
     ax.set_title("PTM site annotation")
     ax.set_ylim(-0.8, len(ytick_labels) - 0.2)
@@ -157,3 +158,12 @@ def _parse_ptm_sites(site_text: str) -> list[int]:
         if digits:
             positions.append(int(digits))
     return positions
+
+
+def _axis_label(column: str) -> str:
+    labels = {
+        "s": "Sequence separation s (residues)",
+        "lag": "Lag (frames)",
+        "frame": "Frame (index)",
+    }
+    return labels.get(column, column)

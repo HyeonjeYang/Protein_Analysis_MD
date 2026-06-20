@@ -1,0 +1,116 @@
+"""Canonical unit definitions and analysis-output unit metadata."""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Mapping
+from pathlib import Path
+
+CANONICAL_UNITS: dict[str, str] = {
+    "length": "nm",
+    "time_step": "ps",
+    "time_report": "ns",
+    "energy": "kJ/mol",
+    "temperature": "K",
+    "ionic_strength": "M",
+    "charge": "e",
+    "mass": "amu",
+    "rg": "nm",
+    "ree": "nm",
+    "internal_distance": "nm",
+    "rs": "nm",
+    "msd": "nm^2",
+    "contact_probability": "dimensionless",
+    "ps": "dimensionless",
+}
+
+ANALYSIS_OUTPUT_UNITS: dict[str, dict[str, str]] = {
+    "timeseries_rg": {
+        "frame": "index",
+        "time_ps": "ps",
+        "rg": CANONICAL_UNITS["rg"],
+    },
+    "timeseries_ree": {
+        "frame": "index",
+        "time_ps": "ps",
+        "ree": CANONICAL_UNITS["ree"],
+    },
+    "contact_map": {
+        "contact_probability": CANONICAL_UNITS["contact_probability"],
+    },
+    "ps": {
+        "s": "residues",
+        "p": CANONICAL_UNITS["ps"],
+        "n_pairs": "count",
+    },
+    "scaling": {
+        "s": "residues",
+        "distance": CANONICAL_UNITS["internal_distance"],
+        "n_pairs": "count",
+    },
+    "msd": {
+        "lag": "frames",
+        "msd": CANONICAL_UNITS["msd"],
+        "n_origins": "count",
+    },
+    "contact_lifetime": {
+        "lag": "frames",
+        "correlation": "dimensionless",
+        "raw_probability": "dimensionless",
+        "n_origins": "count",
+    },
+}
+
+
+def analysis_output_units(output_name: str) -> dict[str, str]:
+    """Return unit metadata for a named analysis output."""
+
+    return dict(ANALYSIS_OUTPUT_UNITS[output_name])
+
+
+def units_sidecar_path(path: str | Path) -> Path:
+    """Return the JSON sidecar path used for unit metadata."""
+
+    output_path = Path(path)
+    return output_path.with_name(f"{output_path.name}.units.json")
+
+
+def write_units_metadata(
+    path: str | Path,
+    units: Mapping[str, str],
+    *,
+    kind: str = "analysis_output",
+) -> Path:
+    """Write a compact JSON unit sidecar for an analysis output."""
+
+    sidecar = units_sidecar_path(path)
+    sidecar.write_text(
+        json.dumps({"kind": kind, "path": str(path), "units": dict(units)}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return sidecar
+
+
+def summary_units(
+    *,
+    input_position_unit: str,
+    canonical_position_unit: str = CANONICAL_UNITS["length"],
+) -> dict[str, object]:
+    """Build the units block written to analysis summary files."""
+
+    return {
+        "canonical": dict(CANONICAL_UNITS),
+        "trajectory": {
+            "input_position_unit": input_position_unit,
+            "canonical_position_unit": canonical_position_unit,
+        },
+        "analysis_outputs": {
+            name: analysis_output_units(name) for name in sorted(ANALYSIS_OUTPUT_UNITS)
+        },
+    }
+
+
+def angstrom_to_nm(values: object) -> object:
+    """Convert coordinate values from Angstrom to nanometers."""
+
+    return values / 10.0
