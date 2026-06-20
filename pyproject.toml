@@ -35,7 +35,7 @@ dependencies = [
   "pandas",
   "scipy",
   "matplotlib",
-  "pydantic",
+  "pydantic>=2",
   "typer",
   "pyyaml",
   "mdtraj",

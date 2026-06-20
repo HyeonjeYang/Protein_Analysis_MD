@@ -52,13 +52,23 @@ The package exposes both `idrptm` and `idr-ptm-md` console scripts:
 ```bash
 idrptm --help
 idrptm init --output work/example
-idrptm design --config configs/example_ptm_scan.yaml
+idrptm design configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan
 idrptm prepare --config configs/example_ptm_scan.yaml --output-dir runs
 idrptm run --config configs/example_ptm_scan.yaml --dry-run
 idrptm analyze --config configs/example_ptm_scan.yaml
 idrptm compare --reference wt.csv --variant ptm.csv
 idrptm report --config configs/example_ptm_scan.yaml
 ```
+
+`idrptm design` currently writes:
+
+- `manifest.csv`
+- one simulation-sequence FASTA file per variant under `fasta/`
+- one per-run metadata stub under `runs/<variant_id>/metadata.yaml`
+
+Design metadata preserves both `original_sequence` and `simulation_sequence`.
+Configured residue positions use one-based biological numbering; internal
+metadata also records zero-based indices.
 
 ## Development
 

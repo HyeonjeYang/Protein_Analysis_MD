@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 
 from idrptm import __version__
+from idrptm.design import design_from_config_file
 
 app = typer.Typer(
     name="idrptm",
@@ -57,15 +58,26 @@ def init_command(
 
 @app.command("design")
 def design_command(
-    config: ConfigOption = None,
-    output: Annotated[
+    config: Annotated[
         Path,
-        typer.Option("--output", "-o", help="Variant design output file."),
-    ] = Path("designs.csv"),
+        typer.Argument(help="Workflow YAML configuration file."),
+    ],
+    output_dir: Annotated[
+        Path | None,
+        typer.Option("--output-dir", "-o", help="Directory for design outputs."),
+    ] = None,
 ) -> None:
-    """Placeholder for WT/PTM variant design."""
+    """Generate WT/PTM design manifest, FASTA files, and metadata stubs."""
 
-    typer.echo(f"Stage 1 placeholder: would design variants from {config} into {output}.")
+    try:
+        result = design_from_config_file(config, output_dir=output_dir)
+    except Exception as exc:
+        typer.echo(f"Design failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    typer.echo(f"Wrote manifest: {result.manifest_path}")
+    typer.echo(f"Wrote {len(result.fasta_paths)} variant FASTA file(s).")
+    typer.echo(f"Wrote {len(result.metadata_paths)} per-run metadata stub(s).")
 
 
 @app.command("prepare")
