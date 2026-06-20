@@ -133,7 +133,7 @@ def _read_manifest(manifest_path: Path) -> list[dict[str, str]]:
 
 
 def _calvados_config(config: WorkflowConfig, variant_id: str) -> dict[str, object]:
-    steps = config.calvados.nframes * config.calvados.wfreq
+    simulation = config.calvados.simulation
     return {
         "sysname": variant_id,
         "box": config.calvados.box_nm,
@@ -141,12 +141,12 @@ def _calvados_config(config: WorkflowConfig, variant_id: str) -> dict[str, objec
         "ionic": config.calvados.ionic_m,
         "pH": config.calvados.ph,
         "topol": config.calvados.topol,
-        "wfreq": config.calvados.wfreq,
-        "steps": steps,
-        "runtime": config.calvados.runtime,
-        "platform": config.calvados.platform,
-        "restart": config.calvados.restart,
-        "frestart": config.calvados.frestart,
+        "wfreq": simulation.save_every_steps,
+        "steps": simulation.total_steps,
+        "runtime": simulation.runtime_hours,
+        "platform": simulation.platform,
+        "restart": simulation.restart,
+        "frestart": simulation.checkpoint_file,
         "verbose": config.calvados.verbose,
     }
 
@@ -213,6 +213,7 @@ def _metadata_json(
             "components_yaml": paths.components_yaml.name,
             "run_script": paths.run_script.name,
         },
+        "simulation": config.calvados.simulation.metadata(),
         "residue_parameters": residue_metadata,
         "files": {
             "input_fasta": paths.input_fasta.name,

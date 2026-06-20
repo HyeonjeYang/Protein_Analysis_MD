@@ -22,6 +22,13 @@ calvados:
   residue_parameters: null
   temperature_k: 293.0
   ph: 7.4
+  simulation:
+    integrator: calvados_default
+    dt_ps: 0.01
+    total_time_ns: 70.7
+    frame_interval_ns: 0.07
+    runtime_hours: 0
+    platform: CPU
 runner:
   backend: slurm
   work_dir: runs/example_ptm_scan

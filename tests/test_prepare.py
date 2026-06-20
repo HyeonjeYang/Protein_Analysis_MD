@@ -5,7 +5,14 @@ import json
 import yaml
 
 from idrptm.calvados_adapter import prepare_from_config
-from idrptm.schema import CalvadosConfig, PTMConfig, PTMSite, SequenceConfig, WorkflowConfig
+from idrptm.schema import (
+    CalvadosConfig,
+    PTMConfig,
+    PTMSite,
+    SequenceConfig,
+    SimulationConfig,
+    WorkflowConfig,
+)
 
 
 def _write_base_residues(path) -> None:
@@ -37,6 +44,7 @@ def _workflow_config(residue_csv, work_dir) -> WorkflowConfig:
             residue_parameters=residue_csv,
             ph=7.4,
             temperature_k=298.0,
+            simulation=SimulationConfig(save_every_steps=100, n_frames=5),
         ),
         runner={"work_dir": work_dir},
     )
@@ -66,12 +74,24 @@ def test_prepare_creates_one_run_directory_per_manifest_row(tmp_path) -> None:
     assert metadata["residue_parameters"]["ph"] == 7.4
     assert metadata["residue_parameters"]["source_file"] == str(residue_csv.resolve())
     assert metadata["residue_parameters"]["ptm_charges"]["pSer"]["pka"] == 6.01
+    assert metadata["simulation"]["dt_ps"] == 0.01
+    assert metadata["simulation"]["save_every_steps"] == 100
+    assert metadata["simulation"]["frame_interval_ns"] == 0.001
+    assert metadata["simulation"]["n_frames"] == 5
+    assert metadata["simulation"]["total_steps"] == 500
+    assert metadata["simulation"]["total_time_ns"] == 0.005
     assert metadata["upstream_policy"]["mutates_calvados_source"] is False
 
     config_yaml = yaml.safe_load((ptm_run / "config.yaml").read_text(encoding="utf-8"))
     components_yaml = yaml.safe_load((ptm_run / "components.yaml").read_text(encoding="utf-8"))
     assert config_yaml["sysname"] == "prep_seq__pSer2"
     assert config_yaml["pH"] == 7.4
+    assert config_yaml["wfreq"] == 100
+    assert config_yaml["steps"] == 500
+    assert config_yaml["runtime"] == 0
+    assert config_yaml["platform"] == "CPU"
+    assert config_yaml["restart"] == "checkpoint"
+    assert config_yaml["frestart"] == "restart.chk"
     assert components_yaml["defaults"]["fresidues"] == "residues.csv"
     assert components_yaml["defaults"]["ffasta"] == "input.fasta"
     assert "from calvados import sim" in (ptm_run / "run.py").read_text(encoding="utf-8")

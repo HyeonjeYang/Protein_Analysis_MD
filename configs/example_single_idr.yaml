@@ -12,6 +12,13 @@ calvados:
   residue_parameters: null
   temperature_k: 293.0
   ph: 7.4
+  simulation:
+    integrator: calvados_default
+    dt_ps: 0.01
+    save_every_steps: 7000
+    n_frames: 1010
+    runtime_hours: 0
+    platform: CPU
 runner:
   backend: local
   work_dir: runs/example_single_idr

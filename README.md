@@ -80,6 +80,13 @@ The base CALVADOS residue CSV must be supplied either as
 `IDRPTM_CALVADOS_RESIDUES` / `CALVADOS_RESIDUES_CSV`. The source file is only
 read; per-run residue tables are written into the generated run directories.
 
+Simulation-time controls live under `calvados.simulation`. The MVP uses the
+CALVADOS default integrator with `dt_ps: 0.01` only. You can specify either
+`save_every_steps` plus `n_frames`, or `total_time_ns` plus
+`frame_interval_ns`; the framework derives the CALVADOS `wfreq`, `steps`,
+frame interval, and total simulated time and records those values in each
+run's `metadata.json`.
+
 The pure analysis core works on synthetic or trajectory-derived coordinate
 arrays without importing CALVADOS. Implemented observables include Rg, Ree,
 contact maps, P(s), internal-distance scaling, Flory exponent fitting, contact

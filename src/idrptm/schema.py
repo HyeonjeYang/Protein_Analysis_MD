@@ -6,11 +6,13 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 PTMKind = Literal["pSer", "pThr"]
 VariantMode = Literal["wt", "explicit", "single_site_scan", "all_sites"]
 ExecutionBackend = Literal["local", "slurm"]
+Integrator = Literal["calvados_default"]
+SimulationPlatform = Literal["CPU", "CUDA"]
 
 
 class StrictModel(BaseModel):
@@ -80,6 +82,105 @@ class PTMConfig(StrictModel):
         return self
 
 
+class SimulationConfig(StrictModel):
+    """CALVADOS simulation timing and output controls for the MVP adapter."""
+
+    integrator: Integrator = "calvados_default"
+    dt_ps: float = 0.01
+    save_every_steps: int | None = Field(7000, gt=0)
+    n_frames: int | None = Field(1010, gt=0)
+    total_time_ns: float | None = Field(None, gt=0)
+    frame_interval_ns: float | None = Field(None, gt=0)
+    total_steps: int | None = Field(None, gt=0)
+    runtime_hours: float = Field(0, ge=0)
+    platform: SimulationPlatform = "CPU"
+    restart: str | None = "checkpoint"
+    checkpoint_file: str = "restart.chk"
+    random_seed: int | None = None
+
+    @field_validator("integrator", mode="before")
+    @classmethod
+    def reject_custom_integrator(cls, value: object) -> object:
+        """Reject integrator switching until the CALVADOS adapter supports it."""
+
+        if value != "calvados_default":
+            raise ValueError(
+                "MVP supports only integrator='calvados_default'; custom dt/integrator "
+                "switching requires a future CALVADOS adapter extension."
+            )
+        return value
+
+    @field_validator("dt_ps", mode="before")
+    @classmethod
+    def reject_custom_timestep(cls, value: object) -> object:
+        """Reject custom timesteps until the CALVADOS adapter supports them."""
+
+        if float(value) != 0.01:
+            raise ValueError(
+                "MVP supports only dt_ps=0.01; custom dt/integrator switching "
+                "requires a future CALVADOS adapter extension."
+            )
+        return value
+
+    @model_validator(mode="after")
+    def derive_timing(self) -> SimulationConfig:
+        """Derive CALVADOS steps/frame timing from the supported input modes."""
+
+        time_mode = self.total_time_ns is not None or self.frame_interval_ns is not None
+        if time_mode:
+            if self.total_time_ns is None or self.frame_interval_ns is None:
+                raise ValueError(
+                    "Provide both total_time_ns and frame_interval_ns for time-based "
+                    "simulation timing."
+                )
+            save_every_steps = round(self.frame_interval_ns * 1000.0 / self.dt_ps)
+            n_frames = round(self.total_time_ns / self.frame_interval_ns)
+            if save_every_steps <= 0 or n_frames <= 0:
+                raise ValueError("Derived save_every_steps and n_frames must be positive.")
+            total_steps = save_every_steps * n_frames
+            self.save_every_steps = save_every_steps
+            self.n_frames = n_frames
+            self.total_steps = total_steps
+            self.frame_interval_ns = save_every_steps * self.dt_ps / 1000.0
+            self.total_time_ns = total_steps * self.dt_ps / 1000.0
+            return self
+
+        if self.save_every_steps is None or self.n_frames is None:
+            raise ValueError(
+                "Provide save_every_steps and n_frames, or total_time_ns and "
+                "frame_interval_ns."
+            )
+
+        total_steps = self.save_every_steps * self.n_frames
+        if self.total_steps is not None and self.total_steps != total_steps:
+            raise ValueError(
+                "total_steps must equal save_every_steps * n_frames when all three "
+                "are provided."
+            )
+        self.total_steps = total_steps
+        self.frame_interval_ns = self.save_every_steps * self.dt_ps / 1000.0
+        self.total_time_ns = total_steps * self.dt_ps / 1000.0
+        return self
+
+    def metadata(self) -> dict[str, float | int | str | None]:
+        """Return raw and derived simulation timing values for metadata.json."""
+
+        return {
+            "integrator": self.integrator,
+            "dt_ps": self.dt_ps,
+            "save_every_steps": self.save_every_steps,
+            "n_frames": self.n_frames,
+            "total_time_ns": self.total_time_ns,
+            "frame_interval_ns": self.frame_interval_ns,
+            "total_steps": self.total_steps,
+            "runtime_hours": self.runtime_hours,
+            "platform": self.platform,
+            "restart": self.restart,
+            "checkpoint_file": self.checkpoint_file,
+            "random_seed": self.random_seed,
+        }
+
+
 class CalvadosConfig(StrictModel):
     """External CALVADOS backend settings."""
 
@@ -94,12 +195,7 @@ class CalvadosConfig(StrictModel):
     ph: float = 7.4
     ionic_m: float = 0.19
     topol: str = "center"
-    wfreq: int = 7000
-    nframes: int = 1010
-    runtime: int = 0
-    platform: str = "CPU"
-    restart: str = "checkpoint"
-    frestart: str = "restart.chk"
+    simulation: SimulationConfig = Field(default_factory=SimulationConfig)
     verbose: bool = True
     charge_termini: Literal["both", "N", "C", "none"] = "both"
     molecule_type: str = "protein"
