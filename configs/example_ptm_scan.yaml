@@ -1,0 +1,36 @@
+project: example_ptm_scan
+sequence:
+  name: phosphorylation_scan_fragment
+  sequence: "MSSGQSTTQSPAQGTSNQ"
+ptm:
+  mode: single_site_scan
+  include_wt: true
+  sites:
+    - position: 2
+      residue: S
+      ptm: pSer
+    - position: 6
+      residue: S
+      ptm: pSer
+    - position: 7
+      residue: T
+      ptm: pThr
+calvados:
+  installation: null
+  model: pCALVADOS2
+  residue_parameters: null
+  temperature_k: 293.0
+  ph: 7.4
+runner:
+  backend: slurm
+  work_dir: runs/example_ptm_scan
+  dry_run: true
+analysis:
+  observables:
+    - rg
+    - ree
+    - contacts
+    - ps
+    - scaling
+    - lifetime
+    - msd

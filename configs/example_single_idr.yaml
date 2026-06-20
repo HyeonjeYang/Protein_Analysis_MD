@@ -1,0 +1,26 @@
+project: example_single_idr
+sequence:
+  name: ash1_idr_fragment
+  sequence: "MASNDYTQQATQSYGAYPTQPGQGYSQQSSQPPQ"
+ptm:
+  mode: wt
+  include_wt: true
+calvados:
+  installation: null
+  model: CALVADOS2
+  residue_parameters: null
+  temperature_k: 293.0
+  ph: 7.4
+runner:
+  backend: local
+  work_dir: runs/example_single_idr
+  dry_run: true
+analysis:
+  observables:
+    - rg
+    - ree
+    - contacts
+    - ps
+    - scaling
+    - lifetime
+    - msd
