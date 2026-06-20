@@ -80,6 +80,11 @@ The base CALVADOS residue CSV must be supplied either as
 `IDRPTM_CALVADOS_RESIDUES` / `CALVADOS_RESIDUES_CSV`. The source file is only
 read; per-run residue tables are written into the generated run directories.
 
+The pure analysis core works on synthetic or trajectory-derived coordinate
+arrays without importing CALVADOS. Implemented observables include Rg, Ree,
+contact maps, P(s), internal-distance scaling, Flory exponent fitting, contact
+lifetime, and center-of-mass MSD.
+
 ## Development
 
 ```bash
@@ -95,7 +100,7 @@ ruff check .
 2. Stage 2: sequence ingestion, PTM state generation for pSer/pThr, and
    CALVADOS run-directory generation.
 3. Stage 3: local and SLURM execution scaffolds with reproducible manifests.
-4. Stage 4: trajectory analysis for Rg, Ree, contacts, P(s), R(s), scaling,
-   lifetime, and MSD.
+4. Stage 4: pure trajectory-analysis core for Rg, Ree, contacts, P(s), R(s),
+   scaling, lifetime, and MSD.
 5. Stage 5: WT-vs-PTM comparison tables, plots, and reports.
 6. Stage 6: parameter validation workflow before expanding beyond pSer/pThr.
