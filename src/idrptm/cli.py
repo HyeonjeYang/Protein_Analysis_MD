@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 
 from idrptm import __version__
+from idrptm.analysis.pipeline import analyze_run_directory
 from idrptm.calvados_adapter import prepare_from_config_file
 from idrptm.design import design_from_config_file
 
@@ -132,18 +133,50 @@ def run_command(
 
 @app.command("analyze")
 def analyze_command(
+    run_dir: Annotated[
+        Path,
+        typer.Argument(
+            help="Prepared CALVADOS run directory containing top.pdb and trajectory.dcd."
+        ),
+    ],
     config: ConfigOption = None,
-    trajectories: Annotated[
-        list[Path] | None,
-        typer.Option("--trajectory", "-t", help="Trajectory file to analyze."),
+    topology: Annotated[
+        Path | None,
+        typer.Option("--topology", help="Topology PDB path. Defaults to RUN_DIR/top.pdb."),
+    ] = None,
+    trajectory: Annotated[
+        Path | None,
+        typer.Option(
+            "--trajectory",
+            "-t",
+            help="Trajectory DCD path. Defaults to RUN_DIR/trajectory.dcd.",
+        ),
+    ] = None,
+    output_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="Analysis output directory. Defaults to RUN_DIR/analysis.",
+        ),
     ] = None,
 ) -> None:
-    """Placeholder for trajectory analysis."""
+    """Analyze a prepared CALVADOS trajectory."""
 
-    count = 0 if trajectories is None else len(trajectories)
-    typer.echo(
-        f"Stage 1 placeholder: would analyze {count} trajectory file(s) using config {config}."
-    )
+    try:
+        result = analyze_run_directory(
+            run_dir,
+            config_path=config,
+            topology=topology,
+            trajectory=trajectory,
+            output_dir=output_dir,
+        )
+    except Exception as exc:
+        typer.echo(f"Analyze failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    typer.echo(f"Wrote analysis outputs to: {result.output_dir}")
+    typer.echo(f"Summary: {result.summary_json}")
 
 
 @app.command("compare")

@@ -39,6 +39,7 @@ dependencies = [
   "typer",
   "pyyaml",
   "mdtraj",
+  "pyarrow",
 ]
 
 [project.optional-dependencies]

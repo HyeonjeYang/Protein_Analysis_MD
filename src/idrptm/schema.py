@@ -123,7 +123,7 @@ class RunnerConfig(StrictModel):
 
 
 class AnalysisConfig(StrictModel):
-    """Analysis outputs planned for Stage 2+."""
+    """Analysis settings for trajectory observables."""
 
     observables: list[str] = Field(
         default_factory=lambda: [
@@ -136,6 +136,11 @@ class AnalysisConfig(StrictModel):
             "msd",
         ]
     )
+    contact_cutoff_nm: float = 0.8
+    min_sequence_separation: int = 1
+    max_lag: int | None = None
+    fit_min_s: int | None = None
+    fit_max_s: int | None = None
 
 
 class WorkflowConfig(StrictModel):

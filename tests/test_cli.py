@@ -96,3 +96,15 @@ def test_prepare_cli_dry_run(tmp_path) -> None:
     assert result.exit_code == 0, result.output
     assert "Would prepare" in result.output
     assert not output_dir.exists()
+
+
+def test_analyze_cli_reports_missing_trajectory_files(tmp_path) -> None:
+    pytest.importorskip("typer")
+    from typer.testing import CliRunner
+
+    from idrptm.cli import app
+
+    result = CliRunner().invoke(app, ["analyze", str(tmp_path)])
+
+    assert result.exit_code == 1
+    assert "Missing topology PDB" in result.output

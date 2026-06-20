@@ -25,6 +25,7 @@ execution scaffolds, and analysis workflows without modifying upstream CALVADOS.
 | Typer | Command-line interface | MIT |
 | PyYAML | YAML parsing | MIT |
 | MDTraj | Trajectory I/O and analysis helper | LGPL-2.1-or-later |
+| PyArrow | Parquet output support | Apache-2.0 |
 | pytest | Test runner | MIT |
 | Ruff | Linting and formatting checks | MIT |
 

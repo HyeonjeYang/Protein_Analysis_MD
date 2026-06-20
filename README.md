@@ -56,7 +56,7 @@ idrptm design configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan
 idrptm prepare configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan
 idrptm prepare configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan --dry-run
 idrptm run --config configs/example_ptm_scan.yaml --dry-run
-idrptm analyze --config configs/example_ptm_scan.yaml
+idrptm analyze runs/example_ptm_scan/runs/phosphorylation_scan_fragment__WT
 idrptm compare --reference wt.csv --variant ptm.csv
 idrptm report --config configs/example_ptm_scan.yaml
 ```
@@ -84,6 +84,12 @@ The pure analysis core works on synthetic or trajectory-derived coordinate
 arrays without importing CALVADOS. Implemented observables include Rg, Ree,
 contact maps, P(s), internal-distance scaling, Flory exponent fitting, contact
 lifetime, and center-of-mass MSD.
+
+`idrptm analyze` expects a prepared CALVADOS run directory containing `top.pdb`
+and `trajectory.dcd`, unless explicit paths are supplied with `--topology` and
+`--trajectory`. It writes `timeseries_rg.parquet`, `timeseries_ree.parquet`,
+`contact_map.npy`, `ps.parquet`, `scaling.parquet`, optional `msd.parquet`,
+optional `contact_lifetime.parquet`, and `summary.json`.
 
 ## Development
 
