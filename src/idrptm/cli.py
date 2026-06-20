@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 
 from idrptm import __version__
+from idrptm.calvados_adapter import prepare_from_config_file
 from idrptm.design import design_from_config_file
 
 app = typer.Typer(
@@ -82,18 +83,35 @@ def design_command(
 
 @app.command("prepare")
 def prepare_command(
-    config: ConfigOption = None,
-    output_dir: Annotated[
+    config: Annotated[
         Path,
+        typer.Argument(help="Workflow YAML configuration file."),
+    ],
+    output_dir: Annotated[
+        Path | None,
         typer.Option("--output-dir", "-o", help="CALVADOS run-directory root."),
-    ] = Path("runs"),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Print planned run directories without writing files."),
+    ] = False,
 ) -> None:
-    """Placeholder for CALVADOS run-directory generation."""
+    """Prepare CALVADOS run directories from a workflow config."""
 
-    typer.echo(
-        f"Stage 1 placeholder: would prepare CALVADOS run directories from {config} "
-        f"under {output_dir}."
-    )
+    try:
+        result = prepare_from_config_file(config, output_dir=output_dir, dry_run=dry_run)
+    except Exception as exc:
+        typer.echo(f"Prepare failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    if result.dry_run:
+        typer.echo(f"Dry run: would prepare {len(result.run_directories)} run directories.")
+        for run_dir in result.run_directories:
+            typer.echo(f"Would prepare: {run_dir.path}")
+        return
+
+    typer.echo(f"Prepared {len(result.run_directories)} CALVADOS run directories.")
+    typer.echo(f"Manifest: {result.manifest_path}")
 
 
 @app.command("run")

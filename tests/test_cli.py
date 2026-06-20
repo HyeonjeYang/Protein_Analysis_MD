@@ -60,3 +60,39 @@ def test_design_cli_generates_outputs(tmp_path) -> None:
     assert (output_dir / "fasta" / "cli_seq__WT.fasta").exists()
     assert (output_dir / "fasta" / "cli_seq__pSer2.fasta").exists()
     assert (output_dir / "runs" / "cli_seq__pSer2" / "metadata.yaml").exists()
+
+
+def test_prepare_cli_dry_run(tmp_path) -> None:
+    pytest.importorskip("typer")
+    pytest.importorskip("pydantic")
+    pytest.importorskip("yaml")
+    from typer.testing import CliRunner
+
+    from idrptm.cli import app
+
+    config = tmp_path / "config.yaml"
+    output_dir = tmp_path / "prepare_dry_run"
+    config.write_text(
+        dedent(
+            """
+            project: cli_prepare
+            sequence:
+              name: prep_seq
+              sequence: "AST"
+            ptm:
+              mode: wt
+              include_wt: true
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["prepare", str(config), "--output-dir", str(output_dir), "--dry-run"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Would prepare" in result.output
+    assert not output_dir.exists()

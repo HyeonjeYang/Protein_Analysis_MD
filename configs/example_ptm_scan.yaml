@@ -18,6 +18,7 @@ ptm:
 calvados:
   installation: null
   model: pCALVADOS2
+  # Or set IDRPTM_CALVADOS_RESIDUES / CALVADOS_RESIDUES_CSV.
   residue_parameters: null
   temperature_k: 293.0
   ph: 7.4

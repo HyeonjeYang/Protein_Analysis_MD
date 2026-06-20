@@ -53,7 +53,8 @@ The package exposes both `idrptm` and `idr-ptm-md` console scripts:
 idrptm --help
 idrptm init --output work/example
 idrptm design configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan
-idrptm prepare --config configs/example_ptm_scan.yaml --output-dir runs
+idrptm prepare configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan
+idrptm prepare configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan --dry-run
 idrptm run --config configs/example_ptm_scan.yaml --dry-run
 idrptm analyze --config configs/example_ptm_scan.yaml
 idrptm compare --reference wt.csv --variant ptm.csv
@@ -69,6 +70,15 @@ idrptm report --config configs/example_ptm_scan.yaml
 Design metadata preserves both `original_sequence` and `simulation_sequence`.
 Configured residue positions use one-based biological numbering; internal
 metadata also records zero-based indices.
+
+`idrptm prepare` creates one CALVADOS run directory per manifest row. Each run
+directory contains `input.fasta`, `residues.csv`, `config.yaml`,
+`components.yaml`, `run.py`, and `metadata.json`.
+
+The base CALVADOS residue CSV must be supplied either as
+`calvados.residue_parameters` in the workflow config or through
+`IDRPTM_CALVADOS_RESIDUES` / `CALVADOS_RESIDUES_CSV`. The source file is only
+read; per-run residue tables are written into the generated run directories.
 
 ## Development
 

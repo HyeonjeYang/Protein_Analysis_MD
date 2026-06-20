@@ -89,8 +89,29 @@ class CalvadosConfig(StrictModel):
     )
     model: str = "CALVADOS2"
     residue_parameters: Path | None = None
+    box_nm: list[float] = Field(default_factory=lambda: [50.0, 50.0, 50.0])
     temperature_k: float = 293.0
     ph: float = 7.4
+    ionic_m: float = 0.19
+    topol: str = "center"
+    wfreq: int = 7000
+    nframes: int = 1010
+    runtime: int = 0
+    platform: str = "CPU"
+    restart: str = "checkpoint"
+    frestart: str = "restart.chk"
+    verbose: bool = True
+    charge_termini: Literal["both", "N", "C", "none"] = "both"
+    molecule_type: str = "protein"
+    nmol: int = 1
+
+    @model_validator(mode="after")
+    def validate_box(self) -> CalvadosConfig:
+        """Ensure CALVADOS box dimensions are a three-vector."""
+
+        if len(self.box_nm) != 3:
+            raise ValueError("calvados.box_nm must contain exactly three dimensions.")
+        return self
 
 
 class RunnerConfig(StrictModel):
@@ -140,4 +161,14 @@ def load_config(path: str | Path) -> WorkflowConfig:
             update={"fasta": config_path.parent / config.sequence.fasta}
         )
         config = config.model_copy(update={"sequence": sequence})
+    if (
+        config.calvados.residue_parameters is not None
+        and not config.calvados.residue_parameters.is_absolute()
+    ):
+        calvados = config.calvados.model_copy(
+            update={
+                "residue_parameters": config_path.parent / config.calvados.residue_parameters
+            }
+        )
+        config = config.model_copy(update={"calvados": calvados})
     return config
