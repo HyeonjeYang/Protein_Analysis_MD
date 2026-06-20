@@ -101,8 +101,8 @@ def prepare_from_config(
             ph=config.calvados.ph,
         )
 
-        config_yaml = _calvados_config(config, row["variant_id"])
-        components_yaml = _calvados_components(config, row["variant_id"])
+        config_yaml = _calvados_config(config, row)
+        components_yaml = _calvados_components(config, row)
         paths.config_yaml.write_text(
             yaml.safe_dump(config_yaml, sort_keys=False),
             encoding="utf-8",
@@ -132,15 +132,19 @@ def _read_manifest(manifest_path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
-def _calvados_config(config: WorkflowConfig, variant_id: str) -> dict[str, object]:
+def _calvados_config(config: WorkflowConfig, manifest_row: dict[str, str]) -> dict[str, object]:
     simulation = config.calvados.simulation
+    variant_id = manifest_row["variant_id"]
+    topol = config.calvados.topol
+    if _is_multi_component_row(manifest_row) and topol == "center":
+        topol = manifest_row.get("placement") or "grid"
     return {
         "sysname": variant_id,
         "box": config.calvados.box_nm,
         "temp": config.calvados.temperature_k,
         "ionic": config.calvados.ionic_m,
         "pH": config.calvados.ph,
-        "topol": config.calvados.topol,
+        "topol": topol,
         "wfreq": simulation.save_every_steps,
         "steps": simulation.total_steps,
         "runtime": simulation.runtime_hours,
@@ -151,20 +155,55 @@ def _calvados_config(config: WorkflowConfig, variant_id: str) -> dict[str, objec
     }
 
 
-def _calvados_components(config: WorkflowConfig, variant_id: str) -> dict[str, object]:
+def _calvados_components(config: WorkflowConfig, manifest_row: dict[str, str]) -> dict[str, object]:
+    components = _manifest_components(manifest_row, config)
     return {
         "defaults": {
-            "molecule_type": config.calvados.molecule_type,
-            "nmol": config.calvados.nmol,
             "restraint": False,
             "charge_termini": config.calvados.charge_termini,
             "fresidues": "residues.csv",
             "ffasta": "input.fasta",
         },
         "system": {
-            variant_id: {},
+            component["component_name"]: {
+                "molecule_type": component.get("molecule_type") or config.calvados.molecule_type,
+                "nmol": int(component.get("copies", config.calvados.nmol)),
+            }
+            for component in components
         },
     }
+
+
+def _manifest_components(
+    manifest_row: dict[str, str],
+    config: WorkflowConfig,
+) -> list[dict[str, object]]:
+    components_json = manifest_row.get("components_json")
+    if components_json:
+        parsed = json.loads(components_json)
+        if not isinstance(parsed, list):
+            raise ValueError("Manifest components_json must decode to a list.")
+        return [dict(component) for component in parsed]
+    return [
+        {
+            "component_name": manifest_row["variant_id"],
+            "protein_name": manifest_row["base_sequence_name"],
+            "protein_variant_id": manifest_row["variant_id"],
+            "ptm_state": manifest_row["ptm_state"],
+            "copies": 1,
+            "molecule_type": config.calvados.molecule_type,
+            "original_sequence": manifest_row["original_sequence"],
+            "simulation_sequence": manifest_row["simulation_sequence"],
+        }
+    ]
+
+
+def _is_multi_component_row(manifest_row: dict[str, str]) -> bool:
+    return (
+        manifest_row.get("is_multi_component") == "1"
+        or int(manifest_row.get("component_count", "1")) > 1
+        or int(manifest_row.get("total_molecule_copies", "1")) > 1
+    )
 
 
 def _run_script_text() -> str:
@@ -201,12 +240,16 @@ def _metadata_json(
         "schema_version": 1,
         "project": config.project,
         "variant_id": manifest_row["variant_id"],
+        "system_name": manifest_row.get("system_name", manifest_row["variant_id"]),
+        "placement": manifest_row.get("placement", config.calvados.topol),
+        "is_multi_component": _is_multi_component_row(manifest_row),
         "ptm_state": manifest_row["ptm_state"],
         "ptm_count": int(manifest_row["ptm_count"]),
         "ptm_sites_1based": manifest_row["ptm_sites_1based"],
         "ptm_sites_0based": manifest_row["ptm_sites_0based"],
         "original_sequence": manifest_row["original_sequence"],
         "simulation_sequence": manifest_row["simulation_sequence"],
+        "components": _manifest_components(manifest_row, config),
         "calvados": {
             "model": config.calvados.model,
             "config_yaml": paths.config_yaml.name,

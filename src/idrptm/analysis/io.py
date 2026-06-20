@@ -31,6 +31,12 @@ class TrajectoryData:
     length_unit: str = CANONICAL_UNITS["length"]
     input_position_unit: str = CANONICAL_UNITS["length"]
     canonical_position_unit: str = CANONICAL_UNITS["length"]
+    chain_id: NDArray[np.str_] | None = None
+    molecule_name: NDArray[np.str_] | None = None
+    molecule_copy_id: NDArray[np.int_] | None = None
+    component_name: NDArray[np.str_] | None = None
+    residue_id: NDArray[np.int_] | None = None
+    original_sequence_index: NDArray[np.int_] | None = None
 
     @property
     def n_frames(self) -> int:
@@ -39,6 +45,35 @@ class TrajectoryData:
     @property
     def n_residues(self) -> int:
         return int(self.positions.shape[1])
+
+    def residue_metadata(self) -> dict[str, NDArray[np.str_] | NDArray[np.int_]]:
+        """Return per-residue metadata, filling single-chain defaults when absent."""
+
+        n_residues = self.n_residues
+        return {
+            "chain_id": _metadata_or_default(self.chain_id, n_residues, "chain_0"),
+            "molecule_name": _metadata_or_default(
+                self.molecule_name,
+                n_residues,
+                "molecule_0",
+            ),
+            "molecule_copy_id": _metadata_or_default(self.molecule_copy_id, n_residues, 0),
+            "component_name": _metadata_or_default(
+                self.component_name,
+                n_residues,
+                "component_0",
+            ),
+            "residue_id": _metadata_or_default(
+                self.residue_id,
+                n_residues,
+                np.arange(1, n_residues + 1, dtype=int),
+            ),
+            "original_sequence_index": _metadata_or_default(
+                self.original_sequence_index,
+                n_residues,
+                np.arange(n_residues, dtype=int),
+            ),
+        }
 
 
 class TrajectoryFileError(FileNotFoundError):
@@ -144,6 +179,24 @@ def _validate_positions(positions: NDArray[np.float64]) -> None:
             f"Loaded trajectory has unexpected coordinate shape {positions.shape}; "
             "expected (n_frames, n_atoms, 3)."
         )
+
+
+def _metadata_or_default(
+    values: NDArray[np.str_] | NDArray[np.int_] | None,
+    n_residues: int,
+    default: str | int | NDArray[np.int_],
+) -> NDArray[np.str_] | NDArray[np.int_]:
+    if values is not None:
+        array = np.asarray(values)
+        if array.shape != (n_residues,):
+            raise ValueError(
+                f"Trajectory residue metadata has shape {array.shape}; "
+                f"expected ({n_residues},)."
+            )
+        return array
+    if isinstance(default, np.ndarray):
+        return default
+    return np.full(n_residues, default)
 
 
 def _require_file(path: Path, label: str) -> None:

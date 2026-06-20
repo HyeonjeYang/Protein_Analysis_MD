@@ -1,0 +1,63 @@
+project: example_multi_protein
+proteins:
+  - name: alpha_idr
+    sequence: "ASGQST"
+    ptm:
+      mode: single_site_scan
+      include_wt: true
+      sites:
+        - position: 2
+          residue: S
+          ptm: pSer
+  - name: beta_idr
+    sequence: "ATGQTT"
+    ptm:
+      mode: explicit
+      include_wt: true
+      sites:
+        - position: 2
+          residue: T
+          ptm: pThr
+system_sets:
+  - name: mixed_alpha_beta
+    placement: random
+    components:
+      - protein: alpha_idr
+        ptm_state: WT
+        copies: 1
+        component_name: alpha_wt
+      - protein: alpha_idr
+        ptm_state: pSer2
+        copies: 1
+        component_name: alpha_pser
+      - protein: beta_idr
+        ptm_state: pThr2
+        copies: 2
+        component_name: beta_pthr
+calvados:
+  installation: null
+  model: pCALVADOS2
+  residue_parameters: null
+  temperature_k: 293.0
+  ph: 7.4
+  topol: center
+  simulation:
+    integrator: calvados_default
+    dt_ps: 0.01
+    save_every_steps: 7000
+    n_frames: 1010
+    runtime_hours: 0
+    platform: CPU
+runner:
+  backend: local
+  work_dir: runs/example_multi_protein
+  dry_run: true
+analysis:
+  observables:
+    - rg
+    - ree
+    - contacts
+    - ps
+    - scaling
+    - lifetime
+    - msd

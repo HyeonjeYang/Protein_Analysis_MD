@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,30 +11,61 @@ from pathlib import Path
 import yaml
 
 from idrptm.ptm import AppliedPTM, PTMRequest, PTMState, apply_ptms
-from idrptm.schema import PTMSite, WorkflowConfig, load_config
+from idrptm.schema import ProteinConfig, PTMConfig, PTMSite, WorkflowConfig, load_config
 from idrptm.sequence import (
     SequenceRecord,
+    format_fasta,
     load_single_sequence,
     sanitize_identifier,
-    write_fasta,
 )
 
 
 @dataclass(frozen=True)
-class DesignedVariant:
-    """A sequence/PTM design ready to be translated into backend input."""
+class DesignedComponent:
+    """One molecular component in a CALVADOS system design."""
 
-    variant_id: str
+    component_name: str
+    protein_name: str
+    protein_variant_id: str
     base_sequence: SequenceRecord
     original_sequence: str
     simulation_sequence: str
     ptm_state: PTMState
+    copies: int = 1
+    molecule_type: str = "protein"
 
     @property
     def is_wild_type(self) -> bool:
         """Return true for the unmodified original-sequence design."""
 
         return self.ptm_state.is_wild_type
+
+
+@dataclass(frozen=True)
+class DesignedVariant:
+    """A single- or multi-protein system design ready for backend input."""
+
+    variant_id: str
+    base_sequence: SequenceRecord
+    original_sequence: str
+    simulation_sequence: str
+    ptm_state: PTMState
+    components: tuple[DesignedComponent, ...]
+    system_name: str
+    placement: str
+
+    @property
+    def is_wild_type(self) -> bool:
+        """Return true when every component is wild type."""
+
+        return all(component.is_wild_type for component in self.components)
+
+    @property
+    def is_multi_component(self) -> bool:
+        """Return true for systems with multiple molecules or components."""
+
+        total_copies = sum(component.copies for component in self.components)
+        return len(self.components) > 1 or total_copies > 1
 
 
 @dataclass(frozen=True)
@@ -90,78 +122,238 @@ def _variant_id(sequence_name: str, applied_sites: tuple[AppliedPTM, ...]) -> st
 
 
 def _configured_requests(
-    config: WorkflowConfig,
+    ptm: PTMConfig,
     sequence: SequenceRecord,
 ) -> list[tuple[PTMRequest, ...]]:
-    configured_sites = tuple(_request_from_site(site) for site in config.ptm.sites)
+    configured_sites = tuple(_request_from_site(site) for site in ptm.sites)
     discovered_sites = _discover_phosphorylation_sites(sequence)
 
-    if config.ptm.mode == "wt":
+    if ptm.mode == "wt":
         return []
-    if config.ptm.mode == "explicit":
+    if ptm.mode == "explicit":
         return [configured_sites]
-    if config.ptm.mode == "single_site_scan":
+    if ptm.mode == "single_site_scan":
         sites = configured_sites or discovered_sites
         return [(site,) for site in sites]
-    if config.ptm.mode == "all_sites":
+    if ptm.mode == "all_sites":
         sites = configured_sites or discovered_sites
         return [sites] if sites else []
-    raise ValueError(f"Unsupported PTM mode: {config.ptm.mode}")
+    raise ValueError(f"Unsupported PTM mode: {ptm.mode}")
 
 
 def load_configured_sequence(config: WorkflowConfig) -> SequenceRecord:
-    """Load the sequence configured for a workflow."""
+    """Load the first sequence configured for a workflow."""
 
+    protein = config.proteins[0]
     return load_single_sequence(
-        name=config.sequence.name,
-        sequence=config.sequence.sequence,
-        fasta=config.sequence.fasta,
+        name=protein.name,
+        sequence=protein.sequence,
+        fasta=protein.fasta,
+    )
+
+
+def load_configured_proteins(config: WorkflowConfig) -> tuple[SequenceRecord, ...]:
+    """Load all protein sequences configured for a workflow."""
+
+    return tuple(
+        load_single_sequence(name=protein.name, sequence=protein.sequence, fasta=protein.fasta)
+        for protein in config.proteins
     )
 
 
 def design_variants(config: WorkflowConfig) -> tuple[DesignedVariant, ...]:
-    """Design WT/PTM variants from a workflow config."""
+    """Design single-protein and configured multi-protein system variants."""
 
-    sequence = load_configured_sequence(config)
+    catalog = _protein_variant_catalog(config)
+    if config.system_sets:
+        return tuple(_design_system_sets(config, catalog))
+
     variants: list[DesignedVariant] = []
+    for protein_name in sorted(catalog):
+        unique_components = {
+            component.protein_variant_id: component
+            for component in catalog[protein_name].values()
+        }
+        for component in sorted(unique_components.values(), key=_component_sort_key):
+            variants.append(
+                _system_from_components(
+                    variant_id=component.protein_variant_id,
+                    system_name=component.protein_variant_id,
+                    components=(component,),
+                    placement=config.calvados.topol,
+                )
+            )
+    return tuple(sorted(variants, key=_variant_sort_key))
 
-    if config.ptm.include_wt or config.ptm.mode == "wt":
+
+def _protein_variant_catalog(
+    config: WorkflowConfig,
+) -> dict[str, dict[str, DesignedComponent]]:
+    catalog: dict[str, dict[str, DesignedComponent]] = {}
+    for protein in config.proteins:
+        sequence = load_single_sequence(
+            name=protein.name,
+            sequence=protein.sequence,
+            fasta=protein.fasta,
+        )
+        variants = _design_protein_components(protein, sequence)
+        catalog[sequence.name] = {component.ptm_state.name: component for component in variants}
+        for component in variants:
+            catalog[sequence.name][component.protein_variant_id] = component
+    return catalog
+
+
+def _design_protein_components(
+    protein: ProteinConfig,
+    sequence: SequenceRecord,
+) -> tuple[DesignedComponent, ...]:
+    components: list[DesignedComponent] = []
+
+    if protein.ptm.include_wt or protein.ptm.mode == "wt":
         wt_state = PTMState(name="WT")
-        variants.append(
-            DesignedVariant(
-                variant_id=_variant_id(sequence.name, ()),
+        component_name = _variant_id(sequence.name, ())
+        components.append(
+            DesignedComponent(
+                component_name=component_name,
+                protein_name=sequence.name,
+                protein_variant_id=component_name,
                 base_sequence=sequence,
                 original_sequence=sequence.sequence,
                 simulation_sequence=sequence.sequence,
                 ptm_state=wt_state,
+                copies=1,
+                molecule_type=protein.molecule_type,
             )
         )
 
-    seen_variant_ids = {variant.variant_id for variant in variants}
-    for requests in _configured_requests(config, sequence):
+    seen_variant_ids = {component.protein_variant_id for component in components}
+    for requests in _configured_requests(protein.ptm, sequence):
         simulation_sequence, applied_sites = apply_ptms(sequence.sequence, requests)
         variant_id = _variant_id(sequence.name, applied_sites)
         if variant_id in seen_variant_ids:
             continue
         seen_variant_ids.add(variant_id)
-        variants.append(
-            DesignedVariant(
-                variant_id=variant_id,
+        components.append(
+            DesignedComponent(
+                component_name=variant_id,
+                protein_name=sequence.name,
+                protein_variant_id=variant_id,
                 base_sequence=sequence,
                 original_sequence=sequence.sequence,
                 simulation_sequence=simulation_sequence,
                 ptm_state=PTMState(name=_site_label(applied_sites), sites=applied_sites),
+                copies=1,
+                molecule_type=protein.molecule_type,
             )
         )
 
-    return tuple(sorted(variants, key=_variant_sort_key))
+    return tuple(sorted(components, key=_component_sort_key))
 
 
-def _variant_sort_key(variant: DesignedVariant) -> tuple[int, tuple[int, ...], str]:
-    if variant.is_wild_type:
-        return (0, (), variant.variant_id)
-    positions = tuple(site.zero_based_index for site in variant.ptm_state.sites)
-    return (1, positions, variant.variant_id)
+def _design_system_sets(
+    config: WorkflowConfig,
+    catalog: dict[str, dict[str, DesignedComponent]],
+) -> list[DesignedVariant]:
+    variants: list[DesignedVariant] = []
+    for system_set in sorted(config.system_sets, key=lambda item: item.name):
+        components: list[DesignedComponent] = []
+        for component_config in system_set.components:
+            protein_name = sanitize_identifier(component_config.protein)
+            if protein_name not in catalog:
+                known = ", ".join(sorted(catalog))
+                raise ValueError(f"Unknown protein {component_config.protein!r}; known: {known}.")
+            protein_catalog = catalog[protein_name]
+            if component_config.ptm_state not in protein_catalog:
+                known_states = sorted(
+                    {
+                        component.ptm_state.name
+                        for component in protein_catalog.values()
+                    }
+                )
+                raise ValueError(
+                    f"Protein {protein_name!r} has no PTM state "
+                    f"{component_config.ptm_state!r}; known: {known_states}."
+                )
+            base_component = protein_catalog[component_config.ptm_state]
+            component_name = component_config.component_name or _system_component_name(
+                protein_name,
+                base_component.ptm_state.name,
+            )
+            components.append(
+                DesignedComponent(
+                    component_name=sanitize_identifier(component_name),
+                    protein_name=base_component.protein_name,
+                    protein_variant_id=base_component.protein_variant_id,
+                    base_sequence=base_component.base_sequence,
+                    original_sequence=base_component.original_sequence,
+                    simulation_sequence=base_component.simulation_sequence,
+                    ptm_state=base_component.ptm_state,
+                    copies=component_config.copies,
+                    molecule_type=component_config.molecule_type
+                    or base_component.molecule_type,
+                )
+            )
+        variant_id = _system_variant_id(system_set.name, tuple(components))
+        variants.append(
+            _system_from_components(
+                variant_id=variant_id,
+                system_name=system_set.name,
+                components=tuple(components),
+                placement=system_set.placement,
+            )
+        )
+    return sorted(variants, key=_variant_sort_key)
+
+
+def _system_from_components(
+    *,
+    variant_id: str,
+    system_name: str,
+    components: tuple[DesignedComponent, ...],
+    placement: str,
+) -> DesignedVariant:
+    first = components[0]
+    ptm_state_name = first.ptm_state.name
+    if len(components) > 1 or first.copies > 1:
+        ptm_state_name = ";".join(
+            f"{component.component_name}:{component.ptm_state.name}"
+            for component in components
+        )
+    return DesignedVariant(
+        variant_id=sanitize_identifier(variant_id),
+        base_sequence=first.base_sequence,
+        original_sequence="|".join(component.original_sequence for component in components),
+        simulation_sequence="|".join(component.simulation_sequence for component in components),
+        ptm_state=PTMState(
+            name=ptm_state_name,
+            sites=tuple(site for component in components for site in component.ptm_state.sites),
+        ),
+        components=components,
+        system_name=system_name,
+        placement=placement,
+    )
+
+
+def _component_sort_key(component: DesignedComponent) -> tuple[int, tuple[int, ...], str]:
+    if component.is_wild_type:
+        return (0, (), component.protein_variant_id)
+    positions = tuple(site.zero_based_index for site in component.ptm_state.sites)
+    return (1, positions, component.protein_variant_id)
+
+
+def _variant_sort_key(variant: DesignedVariant) -> tuple[int, str]:
+    return (0 if variant.is_wild_type else 1, variant.variant_id)
+
+
+def _system_component_name(protein_name: str, ptm_state: str) -> str:
+    return sanitize_identifier(f"{protein_name}__{ptm_state}")
+
+
+def _system_variant_id(system_name: str, components: tuple[DesignedComponent, ...]) -> str:
+    labels = [
+        f"{component.component_name}_x{component.copies}" for component in components
+    ]
+    return sanitize_identifier(f"{system_name}__{'__'.join(labels)}")
 
 
 def _site_summary_1based(variant: DesignedVariant) -> str:
@@ -183,6 +375,9 @@ def _metadata_dict(config: WorkflowConfig, variant: DesignedVariant) -> dict[str
         "schema_version": 1,
         "project": config.project,
         "variant_id": variant.variant_id,
+        "system_name": variant.system_name,
+        "placement": variant.placement,
+        "is_multi_component": variant.is_multi_component,
         "base_sequence_name": variant.base_sequence.name,
         "original_sequence": variant.original_sequence,
         "simulation_sequence": variant.simulation_sequence,
@@ -196,6 +391,7 @@ def _metadata_dict(config: WorkflowConfig, variant: DesignedVariant) -> dict[str
             }
             for site in variant.ptm_state.sites
         ],
+        "components": [_component_metadata(component) for component in variant.components],
         "calvados": {
             "model": config.calvados.model,
             "temperature_k": config.calvados.temperature_k,
@@ -206,6 +402,21 @@ def _metadata_dict(config: WorkflowConfig, variant: DesignedVariant) -> dict[str
             "simulation": "not_started",
             "analysis": "not_started",
         },
+    }
+
+
+def _component_metadata(component: DesignedComponent) -> dict[str, object]:
+    return {
+        "component_name": component.component_name,
+        "protein_name": component.protein_name,
+        "protein_variant_id": component.protein_variant_id,
+        "ptm_state": component.ptm_state.name,
+        "copies": component.copies,
+        "molecule_type": component.molecule_type,
+        "original_sequence": component.original_sequence,
+        "simulation_sequence": component.simulation_sequence,
+        "ptm_sites_1based": _component_site_summary_1based(component),
+        "ptm_sites_0based": _component_site_summary_0based(component),
     }
 
 
@@ -233,12 +444,7 @@ def write_design_outputs(
         metadata_path = runs_dir / variant.variant_id / "metadata.yaml"
         metadata_path.parent.mkdir(parents=True, exist_ok=True)
 
-        fasta_record = SequenceRecord(
-            name=variant.variant_id,
-            sequence=variant.original_sequence,
-            description=f"simulation_sequence for {config.project}",
-        )
-        write_fasta(fasta_record, fasta_path, sequence=variant.simulation_sequence)
+        _write_variant_fasta(variant, fasta_path, config.project)
         metadata_path.write_text(
             yaml.safe_dump(_metadata_dict(config, variant), sort_keys=False),
             encoding="utf-8",
@@ -250,6 +456,13 @@ def write_design_outputs(
             {
                 "project": config.project,
                 "variant_id": variant.variant_id,
+                "system_name": variant.system_name,
+                "is_multi_component": int(variant.is_multi_component),
+                "component_count": len(variant.components),
+                "total_molecule_copies": sum(
+                    component.copies for component in variant.components
+                ),
+                "placement": variant.placement,
                 "base_sequence_name": variant.base_sequence.name,
                 "ptm_state": variant.ptm_state.name,
                 "ptm_count": len(variant.ptm_state.sites),
@@ -257,6 +470,11 @@ def write_design_outputs(
                 "ptm_sites_0based": _site_summary_0based(variant),
                 "original_sequence": variant.original_sequence,
                 "simulation_sequence": variant.simulation_sequence,
+                "components_json": json.dumps(
+                    [_component_metadata(component) for component in variant.components],
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
                 "fasta_path": fasta_relative,
                 "metadata_path": metadata_relative,
             }
@@ -267,6 +485,11 @@ def write_design_outputs(
     fieldnames = [
         "project",
         "variant_id",
+        "system_name",
+        "is_multi_component",
+        "component_count",
+        "total_molecule_copies",
+        "placement",
         "base_sequence_name",
         "ptm_state",
         "ptm_count",
@@ -274,6 +497,7 @@ def write_design_outputs(
         "ptm_sites_0based",
         "original_sequence",
         "simulation_sequence",
+        "components_json",
         "fasta_path",
         "metadata_path",
     ]
@@ -298,3 +522,31 @@ def design_from_config_file(
     """Load a workflow config and write Stage 2 design outputs."""
 
     return write_design_outputs(load_config(config_path), output_dir=output_dir)
+
+
+def _write_variant_fasta(variant: DesignedVariant, path: Path, project: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    records = []
+    for component in variant.components:
+        record = SequenceRecord(
+            name=component.component_name,
+            sequence=component.original_sequence,
+            description=f"simulation_sequence for {project}",
+        )
+        records.append(format_fasta(record, sequence=component.simulation_sequence).rstrip())
+    path.write_text("\n".join(records) + "\n", encoding="utf-8")
+    return path
+
+
+def _component_site_summary_1based(component: DesignedComponent) -> str:
+    return ";".join(
+        f"{site.ptm}:{site.source_residue}{site.biological_position}->{site.simulation_code}"
+        for site in component.ptm_state.sites
+    )
+
+
+def _component_site_summary_0based(component: DesignedComponent) -> str:
+    return ";".join(
+        f"{site.ptm}:{site.zero_based_index}:{site.source_residue}->{site.simulation_code}"
+        for site in component.ptm_state.sites
+    )

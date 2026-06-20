@@ -53,6 +53,7 @@ The package exposes both `idrptm` and `idr-ptm-md` console scripts:
 idrptm --help
 idrptm init --output work/example
 idrptm design configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan
+idrptm design configs/example_multi_protein.yaml --output-dir runs/example_multi_protein
 idrptm prepare configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan
 idrptm prepare configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan --dry-run
 idrptm run --config configs/example_ptm_scan.yaml --dry-run
@@ -71,9 +72,22 @@ Design metadata preserves both `original_sequence` and `simulation_sequence`.
 Configured residue positions use one-based biological numbering; internal
 metadata also records zero-based indices.
 
+New workflows should use `proteins:` to define one or more protein/IDR sequence
+inputs, each with its own PTM design settings. Legacy single-sequence configs
+using `sequence:` plus top-level `ptm:` remain supported, and a single
+`protein:` entry is also accepted. `system_sets:` defines explicit combinations
+of protein PTM states, copy numbers, molecule types, and placement modes. This
+supports single-protein runs, multi-protein runs, and mixed WT/PTM systems such
+as WT and phosphorylated copies of the same protein in one CALVADOS system.
+
 `idrptm prepare` creates one CALVADOS run directory per manifest row. Each run
 directory contains `input.fasta`, `residues.csv`, `config.yaml`,
 `components.yaml`, `run.py`, and `metadata.json`.
+
+For multi-component systems, `components.yaml` contains one CALVADOS component
+per configured system component. If `calvados.topol` is left as `center`, the
+adapter uses the `system_sets[].placement` value, such as `grid`, `random`, or
+`slab`, rather than centering all components on top of each other.
 
 The base CALVADOS residue CSV must be supplied either as
 `calvados.residue_parameters` in the workflow config or through
@@ -91,6 +105,11 @@ The pure analysis core works on synthetic or trajectory-derived coordinate
 arrays without importing CALVADOS. Implemented observables include Rg, Ree,
 contact maps, P(s), internal-distance scaling, Flory exponent fitting, contact
 lifetime, and center-of-mass MSD.
+
+When per-residue chain metadata are available, analysis also supports
+chain-resolved Rg/Ree, intra-chain and inter-chain contact maps, chain COM
+distances, per-chain COM MSD, cluster-size time series, and inter-protein
+contact lifetime.
 
 `idrptm analyze` expects a prepared CALVADOS run directory containing `top.pdb`
 and `trajectory.dcd`, unless explicit paths are supplied with `--topology` and

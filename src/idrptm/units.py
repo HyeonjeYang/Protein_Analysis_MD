@@ -59,6 +59,43 @@ ANALYSIS_OUTPUT_UNITS: dict[str, dict[str, str]] = {
         "raw_probability": "dimensionless",
         "n_origins": "count",
     },
+    "per_chain_rg": {
+        "frame": "index",
+        "chain_id": "identifier",
+        "rg": CANONICAL_UNITS["rg"],
+    },
+    "per_chain_ree": {
+        "frame": "index",
+        "chain_id": "identifier",
+        "ree": CANONICAL_UNITS["ree"],
+    },
+    "intra_chain_contact_map": {
+        "contact_probability": CANONICAL_UNITS["contact_probability"],
+    },
+    "inter_chain_contact_map": {
+        "contact_probability": CANONICAL_UNITS["contact_probability"],
+    },
+    "com_distance": {
+        "frame": "index",
+        "distance": CANONICAL_UNITS["length"],
+    },
+    "chain_com_msd": {
+        "lag": "frames",
+        "msd": CANONICAL_UNITS["msd"],
+        "n_origins": "count",
+    },
+    "cluster_size": {
+        "frame": "index",
+        "n_clusters": "count",
+        "largest_cluster_size": "chains",
+        "mean_cluster_size": "chains",
+    },
+    "inter_protein_contact_lifetime": {
+        "lag": "frames",
+        "correlation": "dimensionless",
+        "raw_probability": "dimensionless",
+        "n_origins": "count",
+    },
 }
 
 

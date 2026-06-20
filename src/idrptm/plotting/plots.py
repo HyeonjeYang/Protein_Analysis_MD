@@ -121,6 +121,56 @@ def plot_ptm_sites(manifest: pd.DataFrame) -> plt.Figure:
     return fig
 
 
+def plot_inter_protein_contact_map(matrix: np.ndarray, title: str) -> plt.Figure:
+    """Plot an inter-protein residue contact probability map."""
+
+    return plot_matrix(matrix, title, "Inter-protein contact probability (dimensionless)")
+
+
+def plot_com_distance_distribution(table: pd.DataFrame) -> plt.Figure:
+    """Plot COM distance distributions for chain pairs."""
+
+    pairs = sorted({f"{row.chain_i}-{row.chain_j}" for row in table.itertuples()})
+    values = []
+    for pair in pairs:
+        chain_i, chain_j = pair.split("-", maxsplit=1)
+        values.append(
+            table.loc[
+                (table["chain_i"] == chain_i) & (table["chain_j"] == chain_j),
+                "distance",
+            ].to_numpy()
+        )
+    fig, ax = plt.subplots(figsize=(max(5, 1.4 * len(pairs)), 4))
+    ax.boxplot(values, tick_labels=pairs, showfliers=False)
+    ax.set_xlabel("Chain pair")
+    ax.set_ylabel("COM distance (nm)")
+    ax.set_title("COM distance distribution")
+    ax.tick_params(axis="x", rotation=30)
+    return fig
+
+
+def plot_cluster_size_distribution(table: pd.DataFrame) -> plt.Figure:
+    """Plot the largest cluster size distribution."""
+
+    fig, ax = plt.subplots(figsize=(5, 4))
+    bins = np.arange(
+        int(table["largest_cluster_size"].min()),
+        int(table["largest_cluster_size"].max()) + 2,
+    )
+    ax.hist(table["largest_cluster_size"], bins=bins, align="left", rwidth=0.8)
+    ax.set_xlabel("Largest cluster size (chains)")
+    ax.set_ylabel("Frame count")
+    ax.set_title("Cluster size distribution")
+    return fig
+
+
+def plot_chain_resolved_rg(table: pd.DataFrame) -> plt.Figure:
+    """Plot chain-resolved Rg distributions."""
+
+    plot_table = table.rename(columns={"chain_id": "condition"})
+    return plot_distribution(plot_table, "rg", "Rg (nm)", "Chain-resolved Rg")
+
+
 def plot_summary_table(summary: pd.DataFrame) -> plt.Figure:
     """Render the scalar comparison summary as a compact table."""
 

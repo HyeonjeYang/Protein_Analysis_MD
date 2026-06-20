@@ -15,6 +15,16 @@ from idrptm.analysis.contacts import contact_map_from_positions
 from idrptm.analysis.io import TrajectoryData, load_calvados_trajectory
 from idrptm.analysis.lifetime import contact_lifetime
 from idrptm.analysis.msd import com_msd
+from idrptm.analysis.multichain import (
+    chain_com_msd,
+    cluster_size_timeseries,
+    com_distance_timeseries,
+    inter_chain_contact_map,
+    inter_protein_contact_lifetime,
+    intra_chain_contact_map,
+    per_chain_ree,
+    per_chain_rg,
+)
 from idrptm.analysis.ps import p_of_s
 from idrptm.analysis.ree import ree_timeseries
 from idrptm.analysis.rg import rg_timeseries
@@ -139,6 +149,18 @@ def analyze_trajectory_data(
             output_name="contact_lifetime",
         )
 
+    chain_ids = trajectory.residue_metadata()["chain_id"]
+    if len(set(chain_ids.tolist())) > 1:
+        outputs.update(
+            _write_multichain_outputs(
+                positions=positions,
+                chain_ids=chain_ids,
+                output_path=output_path,
+                config=config,
+                enabled=enabled,
+            )
+        )
+
     summary_path = output_path / "summary.json"
     summary_path.write_text(
         json.dumps(
@@ -194,6 +216,78 @@ def _contact_states(
         distances = pairwise_distances(frame)
         states[frame_index] = distances[pair_i, pair_j] <= cutoff
     return states
+
+
+def _write_multichain_outputs(
+    *,
+    positions: np.ndarray,
+    chain_ids: np.ndarray,
+    output_path: Path,
+    config: AnalysisConfig,
+    enabled: set[str],
+) -> dict[str, Path]:
+    outputs: dict[str, Path] = {}
+    outputs["per_chain_rg"] = _write_parquet(
+        per_chain_rg(positions, chain_ids),
+        output_path / "per_chain_rg.parquet",
+        output_name="per_chain_rg",
+    )
+    outputs["per_chain_ree"] = _write_parquet(
+        per_chain_ree(positions, chain_ids),
+        output_path / "per_chain_ree.parquet",
+        output_name="per_chain_ree",
+    )
+    intra_maps = intra_chain_contact_map(
+        positions,
+        chain_ids,
+        cutoff=config.contact_cutoff_nm,
+        min_sequence_separation=config.min_sequence_separation,
+    )
+    intra_path = output_path / "intra_chain_contact_map.npz"
+    np.savez(intra_path, **intra_maps)
+    write_units_metadata(intra_path, analysis_output_units("intra_chain_contact_map"))
+    outputs["intra_chain_contact_map"] = intra_path
+
+    inter_path = output_path / "inter_chain_contact_map.npy"
+    np.save(
+        inter_path,
+        inter_chain_contact_map(
+            positions,
+            chain_ids,
+            cutoff=config.contact_cutoff_nm,
+        ),
+    )
+    write_units_metadata(inter_path, analysis_output_units("inter_chain_contact_map"))
+    outputs["inter_chain_contact_map"] = inter_path
+
+    outputs["com_distance"] = _write_parquet(
+        com_distance_timeseries(positions, chain_ids),
+        output_path / "com_distance.parquet",
+        output_name="com_distance",
+    )
+    outputs["cluster_size"] = _write_parquet(
+        cluster_size_timeseries(positions, chain_ids, cutoff=config.contact_cutoff_nm),
+        output_path / "cluster_size.parquet",
+        output_name="cluster_size",
+    )
+    if "msd" in enabled:
+        outputs["chain_com_msd"] = _write_parquet(
+            chain_com_msd(positions, chain_ids, max_lag=config.max_lag),
+            output_path / "chain_com_msd.parquet",
+            output_name="chain_com_msd",
+        )
+    if "lifetime" in enabled or "contact_lifetime" in enabled:
+        outputs["inter_protein_contact_lifetime"] = _write_parquet(
+            inter_protein_contact_lifetime(
+                positions,
+                chain_ids,
+                cutoff=config.contact_cutoff_nm,
+                max_lag=config.max_lag,
+            ),
+            output_path / "inter_protein_contact_lifetime.parquet",
+            output_name="inter_protein_contact_lifetime",
+        )
+    return outputs
 
 
 def _summary(

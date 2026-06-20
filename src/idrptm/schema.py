@@ -13,6 +13,7 @@ VariantMode = Literal["wt", "explicit", "single_site_scan", "all_sites"]
 ExecutionBackend = Literal["local", "slurm"]
 Integrator = Literal["calvados_default"]
 SimulationPlatform = Literal["CPU", "CUDA"]
+PlacementMode = Literal["center", "grid", "random", "slab"]
 
 
 class StrictModel(BaseModel):
@@ -22,7 +23,7 @@ class StrictModel(BaseModel):
 
 
 class SequenceConfig(StrictModel):
-    """Sequence input for a single-chain MVP workflow."""
+    """Sequence input for a protein or IDR molecule."""
 
     name: str = Field(..., description="Human-readable sequence identifier.")
     sequence: str | None = Field(None, description="Inline one-letter amino-acid sequence.")
@@ -79,6 +80,39 @@ class PTMConfig(StrictModel):
         positions = [site.position for site in self.sites]
         if len(positions) != len(set(positions)):
             raise ValueError("PTM site positions must be unique.")
+        return self
+
+
+class ProteinConfig(SequenceConfig):
+    """Protein/IDR definition with its own PTM design space."""
+
+    ptm: PTMConfig = Field(default_factory=PTMConfig)
+    molecule_type: str = "protein"
+
+
+class SystemComponentConfig(StrictModel):
+    """One component in a designed multi-protein system."""
+
+    protein: str
+    ptm_state: str = "WT"
+    copies: int = Field(1, ge=1)
+    molecule_type: str | None = None
+    component_name: str | None = None
+
+
+class SystemSetConfig(StrictModel):
+    """Named combination of protein variants, copy numbers, and placement mode."""
+
+    name: str
+    components: list[SystemComponentConfig] = Field(default_factory=list)
+    placement: PlacementMode = "grid"
+
+    @model_validator(mode="after")
+    def require_components(self) -> SystemSetConfig:
+        """Require at least one component in a system set."""
+
+        if not self.components:
+            raise ValueError("system_sets entries must define at least one component.")
         return self
 
 
@@ -194,7 +228,7 @@ class CalvadosConfig(StrictModel):
     temperature_k: float = 293.0
     ph: float = 7.4
     ionic_m: float = 0.19
-    topol: str = "center"
+    topol: PlacementMode = "center"
     simulation: SimulationConfig = Field(default_factory=SimulationConfig)
     verbose: bool = True
     charge_termini: Literal["both", "N", "C", "none"] = "both"
@@ -243,11 +277,51 @@ class WorkflowConfig(StrictModel):
     """Top-level idr-ptm-md workflow configuration."""
 
     project: str
-    sequence: SequenceConfig
+    sequence: SequenceConfig | None = None
     ptm: PTMConfig = Field(default_factory=PTMConfig)
+    protein: ProteinConfig | None = None
+    proteins: list[ProteinConfig] = Field(default_factory=list)
+    system_sets: list[SystemSetConfig] = Field(default_factory=list)
     calvados: CalvadosConfig = Field(default_factory=CalvadosConfig)
     runner: RunnerConfig = Field(default_factory=RunnerConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
+
+    @model_validator(mode="after")
+    def normalize_protein_inputs(self) -> WorkflowConfig:
+        """Normalize legacy single-protein config into ``proteins``."""
+
+        configured = sum(
+            [
+                bool(self.sequence),
+                bool(self.protein),
+                bool(self.proteins),
+            ]
+        )
+        if configured != 1:
+            raise ValueError(
+                "Provide exactly one protein input style: legacy 'sequence', single "
+                "'protein', or plural 'proteins'."
+            )
+        if self.proteins:
+            names = [protein.name for protein in self.proteins]
+            if len(names) != len(set(names)):
+                raise ValueError("Protein names in 'proteins' must be unique.")
+            return self
+        if self.protein is not None:
+            self.proteins = [self.protein]
+            return self
+        if self.sequence is not None:
+            self.proteins = [
+                ProteinConfig(
+                    name=self.sequence.name,
+                    sequence=self.sequence.sequence,
+                    fasta=self.sequence.fasta,
+                    ptm=self.ptm,
+                    molecule_type=self.calvados.molecule_type,
+                )
+            ]
+            return self
+        return self
 
 
 def load_config(path: str | Path) -> WorkflowConfig:
@@ -257,11 +331,22 @@ def load_config(path: str | Path) -> WorkflowConfig:
     with config_path.open("r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle)
     config = WorkflowConfig.model_validate(data)
-    if config.sequence.fasta is not None and not config.sequence.fasta.is_absolute():
+    if (
+        config.sequence is not None
+        and config.sequence.fasta is not None
+        and not config.sequence.fasta.is_absolute()
+    ):
         sequence = config.sequence.model_copy(
             update={"fasta": config_path.parent / config.sequence.fasta}
         )
         config = config.model_copy(update={"sequence": sequence})
+    if config.protein is not None and config.protein.fasta is not None:
+        protein = _resolve_protein_fasta(config.protein, config_path.parent)
+        config = config.model_copy(update={"protein": protein})
+    proteins = [
+        _resolve_protein_fasta(protein, config_path.parent) for protein in config.proteins
+    ]
+    config = config.model_copy(update={"proteins": proteins})
     if (
         config.calvados.residue_parameters is not None
         and not config.calvados.residue_parameters.is_absolute()
@@ -273,3 +358,9 @@ def load_config(path: str | Path) -> WorkflowConfig:
         )
         config = config.model_copy(update={"calvados": calvados})
     return config
+
+
+def _resolve_protein_fasta(protein: ProteinConfig, base_dir: Path) -> ProteinConfig:
+    if protein.fasta is None or protein.fasta.is_absolute():
+        return protein
+    return protein.model_copy(update={"fasta": base_dir / protein.fasta})
