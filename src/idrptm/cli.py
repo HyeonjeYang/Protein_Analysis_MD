@@ -8,9 +8,11 @@ from typing import Annotated
 import typer
 
 from idrptm import __version__
+from idrptm.analysis.compare import compare_project
 from idrptm.analysis.pipeline import analyze_run_directory
 from idrptm.calvados_adapter import prepare_from_config_file
 from idrptm.design import design_from_config_file
+from idrptm.plotting.report import generate_report
 
 app = typer.Typer(
     name="idrptm",
@@ -181,38 +183,49 @@ def analyze_command(
 
 @app.command("compare")
 def compare_command(
-    reference: Annotated[
-        Path | None,
-        typer.Option("--reference", help="WT or reference analysis table."),
-    ] = None,
-    variant: Annotated[
-        Path | None,
-        typer.Option("--variant", help="PTM variant analysis table."),
-    ] = None,
-    output: Annotated[
+    project_dir: Annotated[
         Path,
-        typer.Option("--output", "-o", help="Comparison output path."),
-    ] = Path("comparison.csv"),
+        typer.Argument(help="Project directory containing manifest.csv and analyzed runs."),
+    ],
+    output_dir: Annotated[
+        Path | None,
+        typer.Option("--output-dir", "-o", help="Comparison output directory."),
+    ] = None,
 ) -> None:
-    """Placeholder for WT-vs-PTM comparisons."""
+    """Compare each PTM condition against the detected WT condition."""
 
-    typer.echo(
-        f"Stage 1 placeholder: would compare reference={reference} and variant={variant} "
-        f"into {output}."
-    )
+    try:
+        result = compare_project(project_dir, output_dir=output_dir)
+    except Exception as exc:
+        typer.echo(f"Compare failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    typer.echo(f"WT condition: {result.wt_condition}")
+    typer.echo(f"Wrote comparison outputs to: {result.output_dir}")
+    typer.echo(f"Summary: {result.outputs['summary_csv']}")
 
 
 @app.command("report")
 def report_command(
-    config: ConfigOption = None,
-    output: Annotated[
+    project_dir: Annotated[
         Path,
-        typer.Option("--output", "-o", help="Report output path."),
-    ] = Path("report.html"),
+        typer.Argument(help="Project directory containing manifest.csv and analyzed runs."),
+    ],
+    output_dir: Annotated[
+        Path | None,
+        typer.Option("--output-dir", "-o", help="Report output directory."),
+    ] = None,
 ) -> None:
-    """Placeholder for report and figure generation."""
+    """Generate WT-vs-PTM comparison figures and a Markdown report."""
 
-    typer.echo(f"Stage 1 placeholder: would generate report {output} using config {config}.")
+    try:
+        result = generate_report(project_dir, output_dir=output_dir)
+    except Exception as exc:
+        typer.echo(f"Report failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    typer.echo(f"Wrote report: {result.report_path}")
+    typer.echo(f"Wrote {len(result.figure_paths)} figure file(s).")
 
 
 def main() -> None:

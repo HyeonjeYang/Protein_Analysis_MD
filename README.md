@@ -57,8 +57,8 @@ idrptm prepare configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan
 idrptm prepare configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan --dry-run
 idrptm run --config configs/example_ptm_scan.yaml --dry-run
 idrptm analyze runs/example_ptm_scan/runs/phosphorylation_scan_fragment__WT
-idrptm compare --reference wt.csv --variant ptm.csv
-idrptm report --config configs/example_ptm_scan.yaml
+idrptm compare runs/example_ptm_scan
+idrptm report runs/example_ptm_scan
 ```
 
 `idrptm design` currently writes:
@@ -91,6 +91,14 @@ and `trajectory.dcd`, unless explicit paths are supplied with `--topology` and
 `contact_map.npy`, `ps.parquet`, `scaling.parquet`, optional `msd.parquet`,
 optional `contact_lifetime.parquet`, and `summary.json`.
 
+`idrptm compare PROJECT_DIR` detects the WT condition by name and compares each
+PTM condition against WT. It writes scalar summaries, aggregate P(s), delta P(s),
+condition-average contact maps, and delta contact maps under `comparison/`.
+
+`idrptm report PROJECT_DIR` writes `report/report.md` plus PNG and PDF figures
+for Rg, Ree, contact maps, delta contact maps, P(s), R(s), PTM site annotation,
+and the scalar summary table.
+
 ## Development
 
 ```bash
@@ -108,5 +116,6 @@ ruff check .
 3. Stage 3: local and SLURM execution scaffolds with reproducible manifests.
 4. Stage 4: pure trajectory-analysis core for Rg, Ree, contacts, P(s), R(s),
    scaling, lifetime, and MSD.
-5. Stage 5: WT-vs-PTM comparison tables, plots, and reports.
-6. Stage 6: parameter validation workflow before expanding beyond pSer/pThr.
+5. Stage 5: CALVADOS trajectory loading and `idrptm analyze`.
+6. Stage 6: WT-vs-PTM comparison tables, plots, and reports.
+7. Stage 7: parameter validation workflow before expanding beyond pSer/pThr.
