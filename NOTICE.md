@@ -14,5 +14,4 @@ No tracked file was identified in the local audit as copied CALVADOS/OpenMM
 source code. If a future file is copied or adapted from an upstream project, it
 must be listed here with source, license, and modification notes.
 
-Parts of this repository may have been developed with AI-assisted coding tools
-and reviewed by the maintainer.
+Created and maintained by Present0206.

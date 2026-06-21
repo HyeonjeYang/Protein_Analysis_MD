@@ -5,9 +5,9 @@ title: "protein_analysis_md"
 version: "0.1.0"
 license: "GPL-3.0-only"
 abstract: "A Python research workflow framework for sequence- and PTM-dependent coarse-grained MD of IDRs/proteins using CALVADOS as the simulation backend."
-repository-code: "https://github.com/idromptm/protein_analysis_md"
+repository-code: "https://github.com/HyeonjeYang/protein_analysis_md"
 authors:
-  - name: "protein_analysis_md contributors"
+  - name: "Present0206"
 keywords:
   - "CALVADOS"
   - "coarse-grained molecular dynamics"

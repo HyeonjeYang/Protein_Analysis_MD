@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "GPL-3.0-only" }
 authors = [
-  { name = "protein_analysis_md contributors" }
+  { name = "Present0206" }
 ]
 keywords = [
   "CALVADOS",
@@ -56,7 +56,7 @@ idrptm = "idrptm.cli:main"
 idr-ptm-md = "idrptm.cli:main"
 
 [project.urls]
-Repository = "https://github.com/idromptm/protein_analysis_md"
+Repository = "https://github.com/HyeonjeYang/protein_analysis_md"
 Backend = "https://github.com/KULL-Centre/CALVADOS"
 
 [tool.setuptools.packages.find]
