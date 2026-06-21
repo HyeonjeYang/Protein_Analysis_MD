@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.1.1 - 2026-06-21
+
+Public cleanup patch.
+
+- Removed maintainer-only release checklist notes from tracked documentation.
+- Added ignore rules for private/local notes and helper scripts.
+- Kept the public README focused on project scope, install, quick start, and
+  citation/licensing.
+
 ## v0.1.0 - 2026-06-21
 
 Initial public pre-alpha release of `protein_analysis_md`.

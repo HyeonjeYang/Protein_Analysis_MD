@@ -1,6 +1,6 @@
 # protein_analysis_md
 
-Status: **v0.1.0 pre-alpha research framework**.
+Status: **v0.1.1 pre-alpha research framework**.
 
 `protein_analysis_md` is a Python workflow layer for sequence-, PTM-, and
 cleavage-aware coarse-grained protein/IDR molecular dynamics. It prepares,
@@ -67,7 +67,7 @@ pamd repo-check
 - `docs/parameter_reference.md` - key parameters
 - `docs/scientific_scope.md` and `docs/limitations.md` - scientific boundaries
 - `docs/visualization_gallery.md` - figure and report outputs
-- `docs/release_v0.1.0.md` - v0.1.0 release notes and assets
+- `CHANGELOG.md` - release history
 
 Generated trajectories, figures, reports, logs, dashboards, and local
 environments are ignored by git and should not be committed.

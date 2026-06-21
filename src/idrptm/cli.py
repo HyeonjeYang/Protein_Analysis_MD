@@ -20,6 +20,7 @@ from idrptm.runner import RunPhase
 app = typer.Typer(
     name="pamd",
     help="Prepare, run, and analyze CALVADOS-backed protein/IDR MD workflows.",
+    invoke_without_command=True,
     no_args_is_help=True,
 )
 
@@ -35,7 +36,11 @@ TrajectoryReader = Literal["mdtraj", "mdanalysis"]
 def callback(
     version: Annotated[
         bool,
-        typer.Option("--version", help="Show the protein_analysis_md version and exit."),
+        typer.Option(
+            "--version",
+            help="Show the protein_analysis_md version and exit.",
+            is_eager=True,
+        ),
     ] = False,
 ) -> None:
     """Top-level CLI callback."""

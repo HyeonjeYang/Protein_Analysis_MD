@@ -19,6 +19,23 @@ env/
 .env
 *.env
 
+# Personal/local notes and helper scripts
+PRIVATE_NOTES.md
+LOCAL_NOTES.md
+RELEASE_NOTES_LOCAL.md
+RELEASE_BODY_LOCAL.md
+*_personal.md
+*_private.md
+*_local_notes.md
+*.local.py
+docs/private/
+docs/local/
+local_notes/
+local_scripts/
+private_scripts/
+.codex/
+.agents/
+
 # Build
 build/
 dist/

@@ -34,6 +34,19 @@ def test_cli_help_works() -> None:
     assert "pack" in result.output
 
 
+def test_cli_version_works_without_command() -> None:
+    pytest.importorskip("typer")
+    from typer.testing import CliRunner
+
+    from idrptm import __version__
+    from idrptm.cli import app
+
+    result = CliRunner().invoke(app, ["--version"])
+
+    assert result.exit_code == 0
+    assert __version__ in result.output
+
+
 def test_pamd_wrapper_help_works() -> None:
     pytest.importorskip("typer")
     from typer.testing import CliRunner
