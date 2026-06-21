@@ -2,7 +2,7 @@ name: protein_analysis_md
 channels:
   - conda-forge
 dependencies:
-  - python=3.10
+  - python=3.11
   - numpy
   - pandas
   - scipy
@@ -12,7 +12,11 @@ dependencies:
   - pyyaml
   - requests
   - mdtraj
+  - mdanalysis
+  - openmm
   - pyarrow
   - pytest
   - ruff
   - pip
+  - pip:
+      - git+https://github.com/KULL-Centre/CALVADOS.git

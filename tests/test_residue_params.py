@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import importlib
 
 import pytest
 
@@ -48,5 +49,20 @@ def test_residue_source_can_come_from_environment(tmp_path, monkeypatch) -> None
     source = tmp_path / "base_residues.csv"
     _write_base_residues(source)
     monkeypatch.setenv("IDRPTM_CALVADOS_RESIDUES", str(source))
+
+    assert resolve_residue_source() == source.resolve()
+
+
+def test_residue_source_can_come_from_installed_calvados(tmp_path, monkeypatch) -> None:
+    package_root = tmp_path / "calvados"
+    data_dir = package_root / "data"
+    data_dir.mkdir(parents=True)
+    (package_root / "__init__.py").write_text("", encoding="utf-8")
+    source = data_dir / "residues.csv"
+    _write_base_residues(source)
+    monkeypatch.delenv("IDRPTM_CALVADOS_RESIDUES", raising=False)
+    monkeypatch.delenv("CALVADOS_RESIDUES_CSV", raising=False)
+    monkeypatch.syspath_prepend(str(tmp_path))
+    importlib.invalidate_caches()
 
     assert resolve_residue_source() == source.resolve()

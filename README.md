@@ -30,21 +30,99 @@ must be installed separately.
 
 ## Installation
 
+### Download The Repository
+
+Clone with Git:
+
+```bash
+git clone https://github.com/HyeonjeYang/Protein_Analysis_MD.git
+cd Protein_Analysis_MD
+```
+
+Or download the GitHub ZIP archive, unzip it, and open a terminal in the
+repository root.
+
+### Recommended Conda Install
+
+The same `environment.yml` is intended for Linux, macOS, Windows PowerShell, and
+Windows WSL2. It installs OpenMM and CALVADOS as external dependencies; their
+source is not copied into this repository.
+
+```bash
+conda env create -f environment.yml
+conda activate protein_analysis_md
+python -m pip install -e ".[dev]"
+pamd env-check
+```
+
+If CALVADOS is installed in the active environment, `pamd prepare` will try to
+use `calvados/data/residues.csv` automatically. To force a specific residue
+table, set `IDRPTM_CALVADOS_RESIDUES`:
+
+```bash
+export IDRPTM_CALVADOS_RESIDUES=/path/to/calvados/data/residues.csv
+```
+
+PowerShell:
+
+```powershell
+$env:IDRPTM_CALVADOS_RESIDUES = "C:\path\to\calvados\data\residues.csv"
+```
+
+### Linux
+
+Use the recommended conda install above. On shared Linux/HPC systems, create the
+environment in your home or project scratch space, run `pamd env-check`, and use
+`pamd hpc-script` only after `pamd prepare` has produced run directories.
+
+### macOS
+
+Use the recommended conda install above on Intel or Apple Silicon Macs. Local
+OpenMM platforms may include `CPU` and sometimes `OpenCL`; CUDA is not expected
+on ordinary Macs. For long local runs, keep the Mac awake and plugged in.
+
+### Windows
+
+WSL2 with Ubuntu is the preferred Windows route for long CALVADOS runs:
+
+```powershell
+wsl --install -d Ubuntu
+```
+
+Then open Ubuntu and use the Linux commands above.
+
+Native Windows PowerShell can also run the workflow if conda, OpenMM, and
+CALVADOS install successfully:
+
+```powershell
+conda env create -f environment.yml
+conda activate protein_analysis_md
+python -m pip install -e ".[dev]"
+pamd env-check
+```
+
+For production MD, prefer WSL2 or a Linux server/HPC if native Windows OpenMM or
+CALVADOS dependencies are unstable.
+
+### Pip-Only Development Install
+
+For analysis-only development without CALVADOS/OpenMM execution:
+
 ```bash
 python -m pip install -e ".[dev]"
 ```
 
-Install CALVADOS separately according to the CALVADOS project instructions.
 Generated trajectories and run outputs should not be committed to git.
 
 ## Minimal Usage
 
 ```bash
 pamd compile configs/flk_smoke.yaml
-pamd estimate-size configs/flk_smoke.yaml
+pamd estimate-size runs/flk_smoke
 pamd prepare runs/flk_smoke
-pamd run runs/flk_smoke --phase all
-pamd analyze runs/flk_smoke
+pamd run runs/flk_smoke --all-runs --phase all --execute
+pamd analyze runs/flk_smoke/runs/<RUN_ID> --config runs/flk_smoke/project.lock.yaml
+pamd compare runs/flk_smoke
 pamd report runs/flk_smoke
 ```
 

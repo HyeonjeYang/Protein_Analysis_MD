@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import importlib.util
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -122,10 +123,15 @@ def resolve_residue_source(path: str | Path | None = None) -> Path:
         if value:
             return _existing_file(Path(value), f"${variable}")
 
+    installed_source = _installed_calvados_residue_csv()
+    if installed_source is not None:
+        return installed_source
+
     variables = ", ".join(RESIDUE_SOURCE_ENV_VARS)
     raise ValueError(
         "No base CALVADOS residue CSV was provided. Set calvados.residue_parameters "
-        f"or one of: {variables}."
+        f"or one of: {variables}. If CALVADOS is installed, expected "
+        "calvados/data/residues.csv to be importable."
     )
 
 
@@ -207,6 +213,24 @@ def _existing_file(path: Path, label: str) -> Path:
     if not resolved.is_file():
         raise ValueError(f"{label} does not exist or is not a file: {resolved}")
     return resolved
+
+
+def _installed_calvados_residue_csv() -> Path | None:
+    spec = importlib.util.find_spec("calvados")
+    if spec is None:
+        return None
+    locations = spec.submodule_search_locations
+    if locations:
+        roots = [Path(location) for location in locations]
+    elif spec.origin:
+        roots = [Path(spec.origin).parent]
+    else:
+        return None
+    for root in roots:
+        candidate = root / "data" / "residues.csv"
+        if candidate.is_file():
+            return candidate.resolve()
+    return None
 
 
 def _format_float(value: float) -> str:
