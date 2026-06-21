@@ -36,6 +36,7 @@ dependencies = [
   "matplotlib",
   "pydantic>=2",
   "typer",
+  "tqdm",
   "pyyaml",
   "requests",
   "mdtraj",

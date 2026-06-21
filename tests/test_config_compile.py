@@ -142,6 +142,40 @@ def test_short_config_replicates_compile_to_workflow(tmp_path) -> None:
     ]
 
 
+def test_short_config_can_auto_name_trajectory_folder(tmp_path) -> None:
+    config = tmp_path / "named.yaml"
+    root = tmp_path / "traj"
+    config.write_text(
+        dedent(
+            f"""
+            project:
+              name: ignored_for_folder
+              traj_name: explicit_traj
+              traj_flag: pilot
+              trajectory_root: {root}
+              include_timestamp: false
+            input:
+              protein:
+                source: direct
+                name: seq
+                sequence: "AST"
+            protocol:
+              preset: smoke_single_chain
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    locked = compile_config_file(config)
+    workflow = load_config(locked.project_dir)
+
+    assert locked.project_dir == root / "explicit_traj__pilot"
+    assert workflow.runner.traj_name == "explicit_traj"
+    assert workflow.runner.traj_flag == "pilot"
+    assert workflow.runner.include_timestamp is False
+
+
 def test_locked_yaml_is_plain_workflow_yaml(tmp_path) -> None:
     config = tmp_path / "plain.yaml"
     outdir = tmp_path / "runs" / "plain"

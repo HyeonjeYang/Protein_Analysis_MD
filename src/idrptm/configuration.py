@@ -16,6 +16,7 @@ from idrptm.presets import (
     report_preset,
     simulation_preset,
 )
+from idrptm.provenance import build_trajectory_folder_name
 from idrptm.schema import WorkflowConfig
 from idrptm.storage import estimate_project_storage
 from idrptm.units import CANONICAL_UNITS
@@ -36,6 +37,7 @@ class NormalizedConfig:
     analysis: dict[str, Any]
     report: dict[str, Any]
     execution: dict[str, Any]
+    trajectory: dict[str, Any]
     sweep: dict[str, Any]
     legacy_workflow: dict[str, Any] | None = None
 
@@ -103,6 +105,7 @@ def normalize_config(
     if _is_legacy_workflow(user_config):
         project_name = _legacy_project_name(user_config)
         project_dir = Path(user_config.get("runner", {}).get("work_dir", f"runs/{project_name}"))
+        trajectory = _legacy_trajectory_options(user_config)
         return NormalizedConfig(
             source_path=path,
             project_name=project_name,
@@ -112,6 +115,7 @@ def normalize_config(
             analysis={"preset": "custom", "overrides": user_config.get("analysis", {})},
             report={"preset": "standard"},
             execution=dict(user_config.get("execution") or {}),
+            trajectory=trajectory,
             sweep=user_config.get("sweep", {}),
             legacy_workflow=dict(user_config),
         )
@@ -119,10 +123,10 @@ def normalize_config(
     project = user_config.get("project", {})
     if isinstance(project, str):
         project_name = project
-        project_dir = Path(user_config.get("outdir", f"runs/{project_name}"))
+        project_payload: dict[str, Any] = {}
     else:
         project_name = str(project.get("name") or "protein_analysis_md_project")
-        project_dir = Path(project.get("outdir") or f"runs/{project_name}")
+        project_payload = dict(project)
     input_block = dict(user_config.get("input") or {})
     if "protein" not in input_block and "protein" in user_config:
         input_block["protein"] = user_config["protein"]
@@ -132,6 +136,19 @@ def normalize_config(
     protocol.setdefault("preset", "smoke_single_chain")
     if path is not None:
         protocol = _resolve_protocol_paths(protocol, path.parent)
+    trajectory = _trajectory_options(
+        project_name=project_name,
+        project_payload=project_payload,
+        user_config=user_config,
+        input_block=input_block,
+        protocol=protocol,
+    )
+    explicit_outdir = (
+        user_config.get("outdir")
+        if isinstance(project, str)
+        else project_payload.get("outdir") or user_config.get("outdir")
+    )
+    project_dir = Path(explicit_outdir) if explicit_outdir else Path(trajectory["work_dir"])
     return NormalizedConfig(
         source_path=path,
         project_name=project_name,
@@ -141,6 +158,7 @@ def normalize_config(
         analysis=dict(user_config.get("analysis") or {"preset": "standard_idr"}),
         report=dict(user_config.get("report") or {"preset": "standard"}),
         execution=dict(user_config.get("execution") or {}),
+        trajectory=trajectory,
         sweep=dict(user_config.get("sweep") or {}),
     )
 
@@ -265,6 +283,7 @@ def compile_config(resolved_config: ResolvedConfig) -> LockedConfig:
         "environment": resolved_config.environment,
         "report": resolved_config.report,
         "execution": resolved_config.execution,
+        "trajectory": resolved_config.normalized.trajectory,
         "sweep": resolved_config.normalized.sweep,
         "warnings": warnings,
     }
@@ -283,6 +302,7 @@ def compile_config(resolved_config: ResolvedConfig) -> LockedConfig:
         "analysis": resolved_config.analysis,
         "report": resolved_config.report,
         "execution": resolved_config.execution,
+        "trajectory": resolved_config.normalized.trajectory,
         "sweep": resolved_config.normalized.sweep,
         "units": CANONICAL_UNITS,
         "storage_estimate": storage_payload,
@@ -377,6 +397,104 @@ def _legacy_input(data: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
+def _legacy_trajectory_options(data: dict[str, Any]) -> dict[str, Any]:
+    runner = dict(data.get("runner") or {})
+    return {
+        "traj_name": runner.get("traj_name"),
+        "traj_flag": runner.get("traj_flag"),
+        "trajectory_root": str(runner.get("trajectory_root", "runs")),
+        "include_timestamp": bool(runner.get("include_timestamp", False)),
+        "timestamp_format": runner.get("timestamp_format", "%Y%m%d_%H%M%S"),
+        "work_dir": str(runner.get("work_dir", f"runs/{_legacy_project_name(data)}")),
+    }
+
+
+def _trajectory_options(
+    *,
+    project_name: str,
+    project_payload: dict[str, Any],
+    user_config: dict[str, Any],
+    input_block: dict[str, Any],
+    protocol: dict[str, Any],
+) -> dict[str, Any]:
+    trajectory = dict(user_config.get("trajectory") or {})
+    traj_name = (
+        project_payload.get("traj_name")
+        or project_payload.get("trajectory_name")
+        or trajectory.get("traj_name")
+        or trajectory.get("trajectory_name")
+    )
+    traj_flag = (
+        project_payload.get("traj_flag")
+        or project_payload.get("flag")
+        or trajectory.get("traj_flag")
+        or trajectory.get("flag")
+    )
+    trajectory_root = Path(
+        project_payload.get("trajectory_root")
+        or trajectory.get("trajectory_root")
+        or user_config.get("trajectory_root")
+        or "runs"
+    )
+    include_timestamp = bool(
+        project_payload.get(
+            "include_timestamp",
+            trajectory.get("include_timestamp", True),
+        )
+    )
+    timestamp_format = str(
+        project_payload.get(
+            "timestamp_format",
+            trajectory.get("timestamp_format", "%Y%m%d_%H%M%S"),
+        )
+    )
+    simulation = dict(protocol.get("simulation") or {})
+    production = dict(simulation.get("production") or {})
+    ptm = dict(input_block.get("ptm") or {})
+    cleavage = dict(input_block.get("cleavage") or {})
+    folder = build_trajectory_folder_name(
+        project_name=project_name,
+        protein_hint=_protein_hint(input_block),
+        preset=str(protocol.get("preset") or "custom"),
+        total_time_ns=production.get("total_time_ns"),
+        replicates=simulation.get("replicates"),
+        ptm_mode=ptm.get("mode"),
+        cleavage_mode=cleavage.get("mode"),
+        traj_name=str(traj_name) if traj_name else None,
+        traj_flag=str(traj_flag) if traj_flag else None,
+        include_timestamp=include_timestamp,
+        timestamp_format=timestamp_format,
+    )
+    return {
+        "traj_name": traj_name,
+        "traj_flag": traj_flag,
+        "trajectory_root": str(trajectory_root),
+        "include_timestamp": include_timestamp,
+        "timestamp_format": timestamp_format,
+        "work_dir": str(trajectory_root / folder),
+    }
+
+
+def _protein_hint(input_block: dict[str, Any]) -> str | None:
+    protein = dict(input_block.get("protein") or {})
+    if protein:
+        return str(
+            protein.get("accession")
+            or protein.get("name")
+            or protein.get("query")
+            or ""
+        )
+    proteins = input_block.get("proteins")
+    if isinstance(proteins, list) and proteins:
+        names = [
+            str(item.get("accession") or item.get("name") or item.get("query") or "")
+            for item in proteins
+            if isinstance(item, dict)
+        ]
+        return "_".join(name for name in names if name) or None
+    return None
+
+
 def _legacy_protocol(data: dict[str, Any]) -> dict[str, Any]:
     calvados = data.get("calvados", {})
     return {
@@ -449,6 +567,13 @@ def _workflow_from_normalized(
             "backend": simulation.get("backend", "local"),
             "work_dir": str(normalized.project_dir),
             "dry_run": True,
+            "traj_name": normalized.trajectory.get("traj_name"),
+            "traj_flag": normalized.trajectory.get("traj_flag"),
+            "trajectory_root": normalized.trajectory.get("trajectory_root", "runs"),
+            "include_timestamp": normalized.trajectory.get("include_timestamp", True),
+            "timestamp_format": normalized.trajectory.get("timestamp_format", "%Y%m%d_%H%M%S"),
+            "progress": bool(simulation.get("progress", True)),
+            "progress_interval_s": float(simulation.get("progress_interval_s", 5.0)),
         },
         "execution": normalized.execution,
         "analysis": _analysis_to_workflow(analysis),

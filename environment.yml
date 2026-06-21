@@ -9,6 +9,7 @@ dependencies:
   - matplotlib
   - pydantic
   - typer
+  - tqdm
   - pyyaml
   - requests
   - mdtraj

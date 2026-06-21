@@ -11,6 +11,7 @@ from pathlib import Path
 import yaml
 
 from idrptm.design import design_variants, write_design_outputs
+from idrptm.provenance import write_parameter_txt
 from idrptm.residue_params import write_residue_parameters
 from idrptm.schema import WorkflowConfig, load_config
 
@@ -26,6 +27,7 @@ class CalvadosRunDirectory:
     components_yaml: Path
     run_script: Path
     metadata_json: Path
+    parameters_txt: Path
 
 
 @dataclass(frozen=True)
@@ -50,6 +52,7 @@ def prepare_calvados_run_directory(output_dir: str | Path) -> CalvadosRunDirecto
         components_yaml=run_dir / "components.yaml",
         run_script=run_dir / "run.py",
         metadata_json=run_dir / "metadata.json",
+        parameters_txt=run_dir / "parameters.txt",
     )
 
 
@@ -116,6 +119,18 @@ def prepare_from_config(
         paths.metadata_json.write_text(
             json.dumps(metadata, indent=2) + "\n",
             encoding="utf-8",
+        )
+        write_parameter_txt(
+            paths.parameters_txt,
+            _parameter_payload(
+                config=config,
+                manifest_row=row,
+                paths=paths,
+                config_yaml=config_yaml,
+                components_yaml=components_yaml,
+                metadata=metadata,
+            ),
+            title="protein_analysis_md prepared run parameters",
         )
         prepared.append(paths)
 
@@ -332,6 +347,46 @@ def _metadata_json(
         },
         "upstream_policy": {
             "mutates_calvados_source": False,
+        },
+    }
+
+
+def _parameter_payload(
+    *,
+    config: WorkflowConfig,
+    manifest_row: dict[str, str],
+    paths: CalvadosRunDirectory,
+    config_yaml: dict[str, object],
+    components_yaml: dict[str, object],
+    metadata: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "project": config.project,
+        "run_dir": str(paths.path),
+        "variant_id": manifest_row["variant_id"],
+        "replicate": metadata.get("replicate"),
+        "replicate_id": metadata.get("replicate_id"),
+        "ptm_state": manifest_row.get("ptm_state"),
+        "trajectory_naming": {
+            "traj_name": config.runner.traj_name,
+            "traj_flag": config.runner.traj_flag,
+            "trajectory_root": str(config.runner.trajectory_root),
+            "include_timestamp": config.runner.include_timestamp,
+            "timestamp_format": config.runner.timestamp_format,
+        },
+        "calvados_config": config_yaml,
+        "components": components_yaml,
+        "simulation": config.calvados.simulation.metadata(),
+        "analysis": config.analysis.model_dump(mode="json"),
+        "metadata": metadata,
+        "files": {
+            "input_fasta": paths.input_fasta.name,
+            "residues_csv": paths.residues_csv.name,
+            "config_yaml": paths.config_yaml.name,
+            "components_yaml": paths.components_yaml.name,
+            "run_script": paths.run_script.name,
+            "metadata_json": paths.metadata_json.name,
+            "parameters_txt": paths.parameters_txt.name,
         },
     }
 

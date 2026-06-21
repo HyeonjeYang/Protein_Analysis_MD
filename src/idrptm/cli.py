@@ -310,6 +310,20 @@ def run_command(
             help="Print planned commands instead of executing them.",
         ),
     ] = True,
+    progress: Annotated[
+        bool,
+        typer.Option(
+            "--progress/--no-progress",
+            help="Show tqdm progress from written DCD frames when executing.",
+        ),
+    ] = True,
+    progress_interval_s: Annotated[
+        float,
+        typer.Option(
+            "--progress-interval-s",
+            help="Seconds between progress/status updates while running.",
+        ),
+    ] = 5.0,
 ) -> None:
     """Run prepared CALVADOS directories locally through generated run scripts."""
 
@@ -335,7 +349,11 @@ def run_command(
                 typer.echo(f"{plan.run_dir}: {' '.join(plan.command)}")
             return
         _confirm_local_nontrivial_run(target, env_info)
-        results = execute_local_runs(plans)
+        results = execute_local_runs(
+            plans,
+            progress=progress,
+            progress_interval_s=progress_interval_s,
+        )
     except Exception as exc:
         typer.echo(f"Run failed: {exc}", err=True)
         raise typer.Exit(1) from exc

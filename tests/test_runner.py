@@ -30,3 +30,8 @@ def test_run_dry_status_and_execute(tmp_path) -> None:
     assert (run_dir / "completed.txt").read_text(encoding="utf-8") == "ok\n"
     completed = json.loads(result.status_json.read_text(encoding="utf-8"))
     assert completed["status"] == "completed"
+    assert completed["elapsed_wall_s"] >= 0
+    assert completed["execution_environment"]["hostname"]
+    parameters_txt = (run_dir / "parameters.txt").read_text(encoding="utf-8")
+    assert "paramdict" in parameters_txt
+    assert "run_status.elapsed_wall_s" in parameters_txt

@@ -377,6 +377,13 @@ class RunnerConfig(StrictModel):
     backend: ExecutionBackend = "local"
     work_dir: Path = Path("runs")
     dry_run: bool = True
+    traj_name: str | None = None
+    traj_flag: str | None = None
+    trajectory_root: Path = Path("runs")
+    include_timestamp: bool = True
+    timestamp_format: str = "%Y%m%d_%H%M%S"
+    progress: bool = True
+    progress_interval_s: float = Field(5.0, gt=0)
 
 
 class ExecutionConfig(StrictModel):

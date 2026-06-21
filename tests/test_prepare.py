@@ -66,6 +66,7 @@ def test_prepare_creates_one_run_directory_per_manifest_row(tmp_path) -> None:
         assert (run_dir.path / "components.yaml").exists()
         assert (run_dir.path / "run.py").exists()
         assert (run_dir.path / "metadata.json").exists()
+        assert (run_dir.path / "parameters.txt").exists()
 
     ptm_run = output_dir / "runs" / "prep_seq__pSer2"
     metadata = json.loads((ptm_run / "metadata.json").read_text(encoding="utf-8"))
@@ -95,6 +96,10 @@ def test_prepare_creates_one_run_directory_per_manifest_row(tmp_path) -> None:
     assert components_yaml["defaults"]["fresidues"] == "residues.csv"
     assert components_yaml["defaults"]["ffasta"] == "input.fasta"
     assert "from calvados import sim" in (ptm_run / "run.py").read_text(encoding="utf-8")
+    parameters_txt = (ptm_run / "parameters.txt").read_text(encoding="utf-8")
+    assert "paramdict" in parameters_txt
+    assert "calvados_config.steps" in parameters_txt
+    assert "'type': 'int'" in parameters_txt
 
 
 def test_prepare_dry_run_does_not_write_files(tmp_path) -> None:

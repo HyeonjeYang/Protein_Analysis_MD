@@ -175,6 +175,33 @@ If `tmux` is unavailable, `--terminal byobu` can be used when byobu is
 installed. Windows users should run detachable long jobs from WSL2 or a Linux
 host rather than native PowerShell.
 
+### Trajectory Naming And Provenance
+
+New short configs can let the framework generate descriptive trajectory
+directories:
+
+```yaml
+project:
+  name: chymotrypsin_scan
+  trajectory_root: runs
+  traj_flag: pilotA
+  # Optional exact base name:
+  # traj_name: CTRC_100ns_reference
+```
+
+If `project.outdir` is omitted, the folder name is built from the protein
+identifier/name, protocol, production time, replicate count, timestamp, and the
+optional `traj_flag` appended last. If `traj_name` is set, that string becomes
+the base name. Set `include_timestamp: false` only for tests or deliberately
+reproducible paths.
+
+Prepared run directories contain `parameters.txt`, a paramdict-style text file
+recording parameter values and Python types. Executed runs update
+`run_status.json` and `parameters.txt` with wall-clock runtime, host/Python
+environment, OpenMM platform availability, and progress estimates. `pamd run`
+shows tqdm progress from written DCD frames when possible; disable it with
+`--no-progress`.
+
 ## Repository Structure
 
 ```text
