@@ -1,0 +1,54 @@
+project:
+  name: chymotrypsin_human_50rep_100ns
+  outdir: runs/chymotrypsin_human_50rep_100ns
+
+input:
+  protein:
+    source: fasta
+    name: CTRC_HUMAN_Q99895
+    fasta: ../data/sequences/Q99895_CTRC_HUMAN.fasta
+    charge_termini: both
+  ptm:
+    mode: none
+  cleavage:
+    mode: none
+
+protocol:
+  preset: production_single_chain
+  simulation:
+    replicates: 50
+    model: CALVADOS2
+    box_nm: [50.0, 50.0, 50.0]
+    platform: CPU
+    runtime_hours: 0
+    random_seed: 20260621
+    production:
+      total_time_ns: 100.0
+      frame_interval_ns: 0.1
+    equilibration:
+      total_time_ns: 10.0
+      frame_interval_ns: 1.0
+      save_trajectory: false
+  environment:
+    temperature_K: 298.0
+    pH: 7.4
+    ionic_M: 0.15
+
+analysis:
+  preset: standard_idr
+  overrides:
+    contact_cutoff_nm: 1.0
+    min_sequence_separation: 2
+    max_lag: 200
+    free_energy:
+      enabled: true
+      variables: [["Rg", "Ree"]]
+      bins: 50
+      temperature_K: 298.0
+      min_count: 1
+
+report:
+  preset: publication_draft
+
+execution:
+  require_remote_for_md: true

@@ -54,6 +54,7 @@ def test_short_config_compiles_to_locked_config(tmp_path) -> None:
     assert workflow.project == "short"
     assert workflow.calvados.simulation.n_frames == 5
     assert workflow.calvados.simulation.save_every_steps == 20000
+    assert workflow.replicates == 1
     assert workflow.execution.require_remote_for_md is True
     assert workflow.execution.expected_hostname_contains == "server"
     assert workflow.storage_estimate["runs"][0]["run_id"] == "seq__WT"
@@ -103,6 +104,42 @@ def test_preset_override_rules() -> None:
     assert merged["production"]["total_time_ns"] == 2.0
     assert merged["production"]["frame_interval_ns"] == 0.1
     assert merged["replicates"] == 2
+
+
+def test_short_config_replicates_compile_to_workflow(tmp_path) -> None:
+    config = tmp_path / "replicates.yaml"
+    outdir = tmp_path / "runs" / "replicates"
+    config.write_text(
+        dedent(
+            f"""
+            project:
+              name: replicates
+              outdir: {outdir}
+            input:
+              protein:
+                source: direct
+                name: seq
+                sequence: "AST"
+            protocol:
+              preset: smoke_single_chain
+              simulation:
+                replicates: 4
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    locked = compile_config_file(config)
+    workflow = load_config(locked.project_dir)
+
+    assert workflow.replicates == 4
+    assert [run["run_id"] for run in workflow.storage_estimate["runs"]] == [
+        "seq__WT__rep001",
+        "seq__WT__rep002",
+        "seq__WT__rep003",
+        "seq__WT__rep004",
+    ]
 
 
 def test_locked_yaml_is_plain_workflow_yaml(tmp_path) -> None:

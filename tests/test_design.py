@@ -9,6 +9,7 @@ from idrptm.schema import (
     PTMSite,
     RunnerConfig,
     SequenceConfig,
+    SimulationConfig,
     WorkflowConfig,
 )
 
@@ -48,3 +49,32 @@ def test_manifest_is_deterministic(tmp_path) -> None:
     assert [row["simulation_sequence"] for row in rows] == ["MSTG", "MBTG", "MSOG"]
     assert rows[1]["ptm_sites_0based"] == "pSer:1:S->B"
     assert rows[2]["ptm_sites_0based"] == "pThr:2:T->O"
+
+
+def test_manifest_expands_replicates_deterministically(tmp_path) -> None:
+    config = WorkflowConfig(
+        project="replicate_scan",
+        replicates=3,
+        sequence=SequenceConfig(name="toy_idr", sequence="MSTG"),
+        ptm=PTMConfig(mode="wt", include_wt=True),
+        calvados=CalvadosConfig(
+            simulation=SimulationConfig(
+                save_every_steps=10,
+                n_frames=5,
+                random_seed=900,
+            )
+        ),
+    )
+
+    result = write_design_outputs(config, output_dir=tmp_path)
+    rows = list(csv.DictReader(result.manifest_path.open(encoding="utf-8")))
+
+    assert [row["variant_id"] for row in rows] == [
+        "toy_idr__WT__rep001",
+        "toy_idr__WT__rep002",
+        "toy_idr__WT__rep003",
+    ]
+    assert [row["base_variant_id"] for row in rows] == ["toy_idr__WT"] * 3
+    assert [row["replicate"] for row in rows] == ["1", "2", "3"]
+    assert [row["replicate_id"] for row in rows] == ["rep001", "rep002", "rep003"]
+    assert [row["random_seed"] for row in rows] == ["900", "901", "902"]

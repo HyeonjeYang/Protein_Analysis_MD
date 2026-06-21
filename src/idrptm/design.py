@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import json
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import yaml
@@ -75,6 +75,10 @@ class DesignedVariant:
     components: tuple[DesignedComponent, ...]
     system_name: str
     placement: str
+    base_variant_id: str | None = None
+    replicate: int = 1
+    replicate_id: str = "rep001"
+    random_seed: int | None = None
 
     @property
     def is_wild_type(self) -> bool:
@@ -186,7 +190,8 @@ def design_variants(config: WorkflowConfig) -> tuple[DesignedVariant, ...]:
 
     catalog = _protein_variant_catalog(config)
     if config.system_sets:
-        return tuple(_design_system_sets(config, catalog))
+        base_variants = tuple(_design_system_sets(config, catalog))
+        return _expand_replicates(base_variants, config)
 
     proteins_by_name = {sanitize_identifier(protein.name): protein for protein in config.proteins}
     variants: list[DesignedVariant] = []
@@ -203,7 +208,50 @@ def design_variants(config: WorkflowConfig) -> tuple[DesignedVariant, ...]:
                     component=component,
                 )
             )
-    return tuple(sorted(variants, key=_variant_sort_key))
+    return _expand_replicates(tuple(sorted(variants, key=_variant_sort_key)), config)
+
+
+def _expand_replicates(
+    variants: tuple[DesignedVariant, ...],
+    config: WorkflowConfig,
+) -> tuple[DesignedVariant, ...]:
+    if config.replicates == 1:
+        return tuple(
+            replace(
+                variant,
+                base_variant_id=variant.base_variant_id or variant.variant_id,
+                replicate=1,
+                replicate_id="rep001",
+                random_seed=config.calvados.simulation.random_seed,
+            )
+            for variant in variants
+        )
+
+    replicated: list[DesignedVariant] = []
+    for variant in variants:
+        base_variant_id = variant.base_variant_id or variant.variant_id
+        for replicate in range(1, config.replicates + 1):
+            replicate_id = f"rep{replicate:03d}"
+            replicated.append(
+                replace(
+                    variant,
+                    variant_id=sanitize_identifier(f"{base_variant_id}__{replicate_id}"),
+                    base_variant_id=base_variant_id,
+                    replicate=replicate,
+                    replicate_id=replicate_id,
+                    random_seed=_replicate_seed(
+                        config.calvados.simulation.random_seed,
+                        replicate,
+                    ),
+                )
+            )
+    return tuple(sorted(replicated, key=_variant_sort_key))
+
+
+def _replicate_seed(base_seed: int | None, replicate: int) -> int | None:
+    if base_seed is None:
+        return None
+    return base_seed + replicate - 1
 
 
 def _single_component_systems(
@@ -501,6 +549,7 @@ def _system_from_components(
         )
     return DesignedVariant(
         variant_id=sanitize_identifier(variant_id),
+        base_variant_id=sanitize_identifier(variant_id),
         base_sequence=first.base_sequence,
         original_sequence="|".join(component.original_sequence for component in components),
         simulation_sequence="|".join(component.simulation_sequence for component in components),
@@ -521,8 +570,12 @@ def _component_sort_key(component: DesignedComponent) -> tuple[int, tuple[int, .
     return (1, positions, component.protein_variant_id)
 
 
-def _variant_sort_key(variant: DesignedVariant) -> tuple[int, str]:
-    return (0 if variant.is_wild_type else 1, variant.variant_id)
+def _variant_sort_key(variant: DesignedVariant) -> tuple[int, str, str]:
+    return (
+        0 if variant.is_wild_type else 1,
+        variant.base_variant_id or variant.variant_id,
+        variant.replicate_id,
+    )
 
 
 def _system_component_name(protein_name: str, ptm_state: str) -> str:
@@ -555,6 +608,10 @@ def _metadata_dict(config: WorkflowConfig, variant: DesignedVariant) -> dict[str
         "schema_version": 1,
         "project": config.project,
         "variant_id": variant.variant_id,
+        "base_variant_id": variant.base_variant_id or variant.variant_id,
+        "replicate": variant.replicate,
+        "replicate_id": variant.replicate_id,
+        "random_seed": variant.random_seed,
         "system_name": variant.system_name,
         "placement": variant.placement,
         "is_multi_component": variant.is_multi_component,
@@ -647,6 +704,10 @@ def write_design_outputs(
             {
                 "project": config.project,
                 "variant_id": variant.variant_id,
+                "base_variant_id": variant.base_variant_id or variant.variant_id,
+                "replicate": variant.replicate,
+                "replicate_id": variant.replicate_id,
+                "random_seed": variant.random_seed,
                 "system_name": variant.system_name,
                 "is_multi_component": int(variant.is_multi_component),
                 "component_count": len(variant.components),
@@ -677,6 +738,10 @@ def write_design_outputs(
     fieldnames = [
         "project",
         "variant_id",
+        "base_variant_id",
+        "replicate",
+        "replicate_id",
+        "random_seed",
         "system_name",
         "is_multi_component",
         "component_count",

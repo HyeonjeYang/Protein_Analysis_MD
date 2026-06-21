@@ -126,8 +126,12 @@ def normalize_config(
     input_block = dict(user_config.get("input") or {})
     if "protein" not in input_block and "protein" in user_config:
         input_block["protein"] = user_config["protein"]
+    if path is not None:
+        input_block = _resolve_input_paths(input_block, path.parent)
     protocol = dict(user_config.get("protocol") or {})
     protocol.setdefault("preset", "smoke_single_chain")
+    if path is not None:
+        protocol = _resolve_protocol_paths(protocol, path.parent)
     return NormalizedConfig(
         source_path=path,
         project_name=project_name,
@@ -139,6 +143,36 @@ def normalize_config(
         execution=dict(user_config.get("execution") or {}),
         sweep=dict(user_config.get("sweep") or {}),
     )
+
+
+def _resolve_input_paths(input_block: dict[str, Any], base_dir: Path) -> dict[str, Any]:
+    resolved = dict(input_block)
+    protein = dict(resolved.get("protein") or {})
+    if protein.get("fasta"):
+        fasta = Path(str(protein["fasta"]))
+        if not fasta.is_absolute():
+            protein["fasta"] = str((base_dir / fasta).resolve())
+    resolved["protein"] = protein
+    ptm = dict(resolved.get("ptm") or {})
+    if ptm.get("file"):
+        ptm_file = Path(str(ptm["file"]))
+        if not ptm_file.is_absolute():
+            ptm["file"] = str((base_dir / ptm_file).resolve())
+    if ptm:
+        resolved["ptm"] = ptm
+    return resolved
+
+
+def _resolve_protocol_paths(protocol: dict[str, Any], base_dir: Path) -> dict[str, Any]:
+    resolved = dict(protocol)
+    simulation = dict(resolved.get("simulation") or {})
+    if simulation.get("residue_parameters"):
+        residue_parameters = Path(str(simulation["residue_parameters"]))
+        if not residue_parameters.is_absolute():
+            simulation["residue_parameters"] = str((base_dir / residue_parameters).resolve())
+    if simulation:
+        resolved["simulation"] = simulation
+    return resolved
 
 
 def resolve_presets(normalized_config: NormalizedConfig) -> ResolvedConfig:
@@ -389,6 +423,7 @@ def _workflow_from_normalized(
     production = dict(simulation.get("production") or {})
     workflow = {
         "project": normalized.project_name,
+        "replicates": int(simulation.get("replicates", 1)),
         "protein": protein,
         "calvados": {
             "model": simulation.get("model", "CALVADOS2"),

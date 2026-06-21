@@ -135,6 +135,7 @@ def _read_manifest(manifest_path: Path) -> list[dict[str, str]]:
 def _calvados_config(config: WorkflowConfig, manifest_row: dict[str, str]) -> dict[str, object]:
     simulation = config.calvados.simulation
     variant_id = manifest_row["variant_id"]
+    random_seed = _manifest_random_seed(manifest_row, simulation.random_seed)
     topol = config.calvados.topol
     if _is_multi_component_row(manifest_row) and topol == "center":
         topol = manifest_row.get("placement") or "grid"
@@ -170,7 +171,7 @@ def _calvados_config(config: WorkflowConfig, manifest_row: dict[str, str]) -> di
         "friction_coeff": 0.01,
         "slab_width": 100,
         "slab_outer": 40,
-        "random_number_seed": simulation.random_seed,
+        "random_number_seed": random_seed,
         "report_potential_energy": False,
         "logfreq": 1000000,
         "gpu_id": 0,
@@ -293,6 +294,13 @@ def _metadata_json(
         "schema_version": 1,
         "project": config.project,
         "variant_id": manifest_row["variant_id"],
+        "base_variant_id": manifest_row.get("base_variant_id") or manifest_row["variant_id"],
+        "replicate": _manifest_int(manifest_row.get("replicate"), 1),
+        "replicate_id": manifest_row.get("replicate_id") or "rep001",
+        "random_seed": _manifest_random_seed(
+            manifest_row,
+            config.calvados.simulation.random_seed,
+        ),
         "system_name": manifest_row.get("system_name", manifest_row["variant_id"]),
         "placement": manifest_row.get("placement", config.calvados.topol),
         "is_multi_component": _is_multi_component_row(manifest_row),
@@ -309,7 +317,13 @@ def _metadata_json(
             "components_yaml": paths.components_yaml.name,
             "run_script": paths.run_script.name,
         },
-        "simulation": config.calvados.simulation.metadata(),
+        "simulation": config.calvados.simulation.metadata()
+        | {
+            "random_seed": _manifest_random_seed(
+                manifest_row,
+                config.calvados.simulation.random_seed,
+            )
+        },
         "residue_parameters": residue_metadata,
         "files": {
             "input_fasta": paths.input_fasta.name,
@@ -320,3 +334,19 @@ def _metadata_json(
             "mutates_calvados_source": False,
         },
     }
+
+
+def _manifest_int(value: str | None, default: int) -> int:
+    if value in (None, ""):
+        return default
+    return int(value)
+
+
+def _manifest_random_seed(
+    manifest_row: dict[str, str],
+    default: int | None,
+) -> int | None:
+    value = manifest_row.get("random_seed")
+    if value in (None, ""):
+        return default
+    return int(value)

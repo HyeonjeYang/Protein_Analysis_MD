@@ -210,7 +210,7 @@ def _load_run_analysis(project_dir: Path, row: dict[str, str]) -> RunAnalysis:
     if not variant_id:
         raise ValueError("Manifest row is missing variant_id.")
     condition = row.get("condition") or row.get("ptm_state") or variant_id
-    replicate_id = row.get("replicate") or variant_id
+    replicate_id = row.get("replicate_id") or row.get("replicate") or variant_id
     cleavage_metadata = _cleavage_metadata(row)
     analysis_dir = _analysis_dir(project_dir, row, variant_id)
     _require_analysis_files(analysis_dir)

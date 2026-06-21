@@ -113,3 +113,41 @@ def test_prepare_dry_run_does_not_write_files(tmp_path) -> None:
     assert len(result.run_directories) == 1
     assert result.run_directories[0].path == output_dir / "runs" / "dry_seq__WT"
     assert not output_dir.exists()
+
+
+def test_prepare_uses_replicate_seed_in_config_and_metadata(tmp_path) -> None:
+    residue_csv = tmp_path / "base_residues.csv"
+    output_dir = tmp_path / "prepared_replicates"
+    _write_base_residues(residue_csv)
+    config = WorkflowConfig(
+        project="prepare_replicates",
+        replicates=2,
+        sequence=SequenceConfig(name="rep_seq", sequence="AST"),
+        ptm=PTMConfig(mode="wt", include_wt=True),
+        calvados=CalvadosConfig(
+            residue_parameters=residue_csv,
+            simulation=SimulationConfig(
+                save_every_steps=100,
+                n_frames=5,
+                random_seed=123,
+            ),
+        ),
+        runner={"work_dir": output_dir},
+    )
+
+    result = prepare_from_config(config)
+
+    assert len(result.run_directories) == 2
+    first = output_dir / "runs" / "rep_seq__WT__rep001"
+    second = output_dir / "runs" / "rep_seq__WT__rep002"
+    first_config = yaml.safe_load((first / "config.yaml").read_text(encoding="utf-8"))
+    second_config = yaml.safe_load((second / "config.yaml").read_text(encoding="utf-8"))
+    first_metadata = json.loads((first / "metadata.json").read_text(encoding="utf-8"))
+    second_metadata = json.loads((second / "metadata.json").read_text(encoding="utf-8"))
+
+    assert first_config["random_number_seed"] == 123
+    assert second_config["random_number_seed"] == 124
+    assert first_metadata["replicate_id"] == "rep001"
+    assert second_metadata["replicate_id"] == "rep002"
+    assert first_metadata["simulation"]["random_seed"] == 123
+    assert second_metadata["simulation"]["random_seed"] == 124
