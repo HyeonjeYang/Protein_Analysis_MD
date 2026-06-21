@@ -80,6 +80,11 @@ environment in your home or project scratch space, run `pamd env-check`, and use
 Use the recommended conda install above on Intel or Apple Silicon Macs. Local
 OpenMM platforms may include `CPU` and sometimes `OpenCL`; CUDA is not expected
 on ordinary Macs. For long local runs, keep the Mac awake and plugged in.
+Install `tmux` if you want detachable production jobs:
+
+```bash
+brew install tmux
+```
 
 ### Windows
 
@@ -132,6 +137,43 @@ Useful diagnostics:
 pamd env-check
 pamd repo-check
 ```
+
+## Local Long Runs
+
+For local production-style runs, prefer the hardware-aware detached launcher:
+
+```bash
+pamd launch-local runs/<PROJECT_DIR> --backend auto --terminal tmux
+```
+
+The launcher inspects the machine and available OpenMM platforms, recommends a
+backend and parallelism, then asks for yes/no confirmation before starting. Use
+`--backend CPU`, `--backend CUDA`, or `--backend OpenCL` to override automatic
+selection. On Apple Silicon Macs, CUDA is not available; this framework
+conservatively chooses CPU unless a reliable accelerator backend is explicitly
+requested and available.
+
+For noninteractive relaunches after an interrupted local run:
+
+```bash
+pamd launch-local runs/<PROJECT_DIR> \
+  --backend auto \
+  --terminal tmux \
+  --replace-existing \
+  --clean-interrupted \
+  --yes
+```
+
+Attach and detach:
+
+```bash
+tmux attach -t pamd_<PROJECT_DIR>
+# detach with Ctrl-b then d
+```
+
+If `tmux` is unavailable, `--terminal byobu` can be used when byobu is
+installed. Windows users should run detachable long jobs from WSL2 or a Linux
+host rather than native PowerShell.
 
 ## Repository Structure
 

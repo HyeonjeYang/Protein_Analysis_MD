@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Annotated, Literal, cast
 
@@ -344,6 +345,158 @@ def run_command(
         typer.echo(f"{result.run_dir}: {result.status} ({result.status_json})")
     if failed:
         raise typer.Exit(1)
+
+
+@app.command("launch-local")
+def launch_local_command(
+    project_dir: Annotated[
+        Path,
+        typer.Argument(help="Prepared project directory containing manifest.csv."),
+    ],
+    backend: Annotated[
+        str,
+        typer.Option(
+            "--backend",
+            help="OpenMM backend: auto, CPU, CUDA, or OpenCL.",
+        ),
+    ] = "auto",
+    simulation_parallel: Annotated[
+        str,
+        typer.Option(
+            "--simulation-parallel",
+            help="Concurrent simulations: auto or an integer.",
+        ),
+    ] = "auto",
+    analysis_parallel: Annotated[
+        str,
+        typer.Option(
+            "--analysis-parallel",
+            help="Concurrent analyses: auto or an integer.",
+        ),
+    ] = "auto",
+    terminal: Annotated[
+        str,
+        typer.Option(
+            "--terminal",
+            help="Detached terminal backend: auto, tmux, byobu, or none.",
+        ),
+    ] = "auto",
+    session_name: Annotated[
+        str | None,
+        typer.Option("--session-name", help="tmux/byobu session name."),
+    ] = None,
+    python_executable: Annotated[
+        str,
+        typer.Option("--python", help="Python executable used inside the worker."),
+    ] = sys.executable,
+    replace_existing: Annotated[
+        bool,
+        typer.Option(
+            "--replace-existing/--keep-existing",
+            help="Stop an existing matching local pipeline before launch.",
+        ),
+    ] = True,
+    clean_interrupted: Annotated[
+        bool,
+        typer.Option(
+            "--clean-interrupted",
+            help="Remove partial trajectories/checkpoints before relaunch.",
+        ),
+    ] = False,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help="Accept the recommended launch settings."),
+    ] = False,
+) -> None:
+    """Recommend CPU/GPU settings and launch a detached local pipeline."""
+
+    from idrptm.local_pipeline import (
+        BackendChoice,
+        TerminalChoice,
+        apply_backend_to_project,
+        clean_interrupted_outputs,
+        launch_local_pipeline,
+        recommend_local_execution,
+        stop_existing_pipeline,
+    )
+
+    try:
+        if backend not in {"auto", "CPU", "CUDA", "OpenCL"}:
+            raise ValueError("--backend must be one of: auto, CPU, CUDA, OpenCL.")
+        if terminal not in {"auto", "tmux", "byobu", "none"}:
+            raise ValueError("--terminal must be one of: auto, tmux, byobu, none.")
+        recommendation = recommend_local_execution(
+            backend=cast(BackendChoice, backend),
+            simulation_parallel=simulation_parallel,
+            analysis_parallel=analysis_parallel,
+            terminal=cast(TerminalChoice, terminal),
+        )
+    except Exception as exc:
+        typer.echo(f"Local launch planning failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    typer.echo(recommendation.summary())
+    if clean_interrupted and not replace_existing:
+        typer.echo("--clean-interrupted requires --replace-existing.", err=True)
+        raise typer.Exit(1)
+    if not yes and not typer.confirm("Launch with this configuration?", default=False):
+        typer.echo("Launch cancelled.")
+        raise typer.Exit()
+
+    try:
+        if replace_existing:
+            stop_existing_pipeline(project_dir, session_name=session_name)
+        if clean_interrupted:
+            clean_interrupted_outputs(project_dir)
+        updated = apply_backend_to_project(
+            project_dir,
+            backend=recommendation.backend,
+            cpu_threads_per_run=recommendation.cpu_threads_per_run,
+        )
+        result = launch_local_pipeline(
+            project_dir,
+            recommendation=recommendation,
+            python_executable=python_executable,
+            session_name=session_name,
+            replace_existing=False,
+        )
+    except Exception as exc:
+        typer.echo(f"Local launch failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    typer.echo(f"Updated backend in {len(updated)} run config file(s).")
+    if result.get("session_name") and recommendation.terminal != "none":
+        typer.echo(f"Launched {recommendation.terminal} session: {result['session_name']}")
+        typer.echo(f"Attach with: {recommendation.terminal} attach -t {result['session_name']}")
+    else:
+        typer.echo(f"Launched detached process PID: {result.get('pid')}")
+    typer.echo(f"Status: {Path(project_dir) / 'pipeline_status.json'}")
+
+
+@app.command("local-pipeline-worker", hidden=True)
+def local_pipeline_worker_command(
+    project_dir: Annotated[
+        Path,
+        typer.Argument(help="Prepared project directory containing manifest.csv."),
+    ],
+    simulation_parallel: Annotated[int, typer.Option("--simulation-parallel")] = 1,
+    analysis_parallel: Annotated[int, typer.Option("--analysis-parallel")] = 1,
+    python_executable: Annotated[
+        str,
+        typer.Option("--python", help="Python executable used for child CLI calls."),
+    ] = sys.executable,
+) -> None:
+    """Internal worker for detached local project execution."""
+
+    from idrptm.local_pipeline import run_pipeline_worker
+
+    code = run_pipeline_worker(
+        project_dir,
+        simulation_parallel=simulation_parallel,
+        analysis_parallel=analysis_parallel,
+        python_executable=python_executable,
+    )
+    raise typer.Exit(code)
 
 
 def _print_run_environment_summary(

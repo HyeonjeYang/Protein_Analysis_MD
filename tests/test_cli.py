@@ -26,6 +26,7 @@ def test_cli_help_works() -> None:
     assert "status" in result.output
     assert "env-check" in result.output
     assert "repo-check" in result.output
+    assert "launch-local" in result.output
 
 
 def test_pamd_wrapper_help_works() -> None:
