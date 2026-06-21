@@ -11,12 +11,32 @@ from idrptm.analysis.cleavage import (
     original_sequence_coordinate_contact_map,
 )
 from idrptm.analysis.contacts import contact_map_from_positions
+from idrptm.analysis.decomposition import (
+    ContactEigenResult,
+    PCAResult,
+    contact_eigendecomposition,
+    contact_map_trajectory,
+    contact_pca,
+    coordinate_pca,
+    distance_map_trajectory,
+    distance_pca,
+    ev1_correlation,
+    feature_pca,
+    nmf_contact_modules,
+    run_decomposition_analysis,
+)
 from idrptm.analysis.energy import parse_energy_log, smooth_energy_timeseries, write_energy_outputs
 from idrptm.analysis.equilibration import (
     block_means,
     equilibration_diagnostics,
     running_mean,
     write_equilibration_outputs,
+)
+from idrptm.analysis.free_energy import (
+    FreeEnergySurface,
+    free_energy_surface_2d,
+    run_free_energy_analysis,
+    write_free_energy_surface,
 )
 from idrptm.analysis.io import TrajectoryData, load_calvados_trajectory
 from idrptm.analysis.lifetime import contact_lifetime
@@ -53,6 +73,9 @@ from idrptm.analysis.smoothing import (
 __all__ = [
     "FloryFit",
     "AnalysisResult",
+    "ContactEigenResult",
+    "FreeEnergySurface",
+    "PCAResult",
     "TrajectoryData",
     "analyze_run_directory",
     "analyze_trajectory_data",
@@ -64,10 +87,19 @@ __all__ = [
     "com_msd",
     "com_distance_timeseries",
     "contact_lifetime",
+    "contact_eigendecomposition",
+    "contact_map_trajectory",
     "contact_map_from_positions",
+    "contact_pca",
+    "coordinate_pca",
     "density_profile_z",
+    "distance_map_trajectory",
+    "distance_pca",
     "equilibration_diagnostics",
+    "ev1_correlation",
+    "feature_pca",
     "fit_flory_exponent",
+    "free_energy_surface_2d",
     "fragment_cluster_size",
     "fragment_resolved_ree",
     "fragment_resolved_rg",
@@ -80,6 +112,7 @@ __all__ = [
     "load_calvados_trajectory",
     "logspace_smooth_1d",
     "largest_cluster_fraction",
+    "nmf_contact_modules",
     "original_sequence_coordinate_contact_map",
     "p_of_s",
     "parse_energy_log",
@@ -87,6 +120,8 @@ __all__ = [
     "per_chain_rg",
     "ree_timeseries",
     "rolling_smooth_1d",
+    "run_decomposition_analysis",
+    "run_free_energy_analysis",
     "running_mean",
     "rg_timeseries",
     "savgol_smooth_1d",
@@ -94,4 +129,5 @@ __all__ = [
     "smooth_energy_timeseries",
     "write_equilibration_outputs",
     "write_energy_outputs",
+    "write_free_energy_surface",
 ]

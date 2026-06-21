@@ -35,6 +35,7 @@ class NormalizedConfig:
     protocol: dict[str, Any]
     analysis: dict[str, Any]
     report: dict[str, Any]
+    execution: dict[str, Any]
     sweep: dict[str, Any]
     legacy_workflow: dict[str, Any] | None = None
 
@@ -48,6 +49,7 @@ class ResolvedConfig:
     environment: dict[str, Any]
     analysis: dict[str, Any]
     report: dict[str, Any]
+    execution: dict[str, Any]
     workflow: dict[str, Any]
     warnings: tuple[str, ...] = ()
 
@@ -109,6 +111,7 @@ def normalize_config(
             protocol=_legacy_protocol(user_config),
             analysis={"preset": "custom", "overrides": user_config.get("analysis", {})},
             report={"preset": "standard"},
+            execution=dict(user_config.get("execution") or {}),
             sweep=user_config.get("sweep", {}),
             legacy_workflow=dict(user_config),
         )
@@ -133,6 +136,7 @@ def normalize_config(
         protocol=protocol,
         analysis=dict(user_config.get("analysis") or {"preset": "standard_idr"}),
         report=dict(user_config.get("report") or {"preset": "standard"}),
+        execution=dict(user_config.get("execution") or {}),
         sweep=dict(user_config.get("sweep") or {}),
     )
 
@@ -150,6 +154,7 @@ def resolve_presets(normalized_config: NormalizedConfig) -> ResolvedConfig:
             environment=protocol.get("environment", {}),
             analysis=workflow.get("analysis", {}),
             report=normalized_config.report,
+            execution=workflow.get("execution", {}),
             workflow=workflow,
             warnings=tuple(warnings),
         )
@@ -188,6 +193,7 @@ def resolve_presets(normalized_config: NormalizedConfig) -> ResolvedConfig:
         environment=environment,
         analysis=analysis,
         report=report,
+        execution=normalized_config.execution,
         workflow=workflow,
         warnings=tuple(warnings),
     )
@@ -224,6 +230,7 @@ def compile_config(resolved_config: ResolvedConfig) -> LockedConfig:
         "simulation": resolved_config.simulation,
         "environment": resolved_config.environment,
         "report": resolved_config.report,
+        "execution": resolved_config.execution,
         "sweep": resolved_config.normalized.sweep,
         "warnings": warnings,
     }
@@ -241,6 +248,7 @@ def compile_config(resolved_config: ResolvedConfig) -> LockedConfig:
         "environment": resolved_config.environment,
         "analysis": resolved_config.analysis,
         "report": resolved_config.report,
+        "execution": resolved_config.execution,
         "sweep": resolved_config.normalized.sweep,
         "units": CANONICAL_UNITS,
         "storage_estimate": storage_payload,
@@ -362,6 +370,7 @@ def _normalize_legacy_workflow(data: dict[str, Any]) -> dict[str, Any]:
         simulation.setdefault("platform", calvados.pop("platform"))
         calvados["simulation"] = simulation
     workflow["calvados"] = calvados
+    workflow.setdefault("execution", {})
     workflow.setdefault("compiled", {})
     workflow.setdefault("units", CANONICAL_UNITS)
     workflow.setdefault("storage_estimate", {})
@@ -406,6 +415,7 @@ def _workflow_from_normalized(
             "work_dir": str(normalized.project_dir),
             "dry_run": True,
         },
+        "execution": normalized.execution,
         "analysis": _analysis_to_workflow(analysis),
         "compiled": {
             "report": report,
@@ -525,6 +535,8 @@ def _analysis_to_workflow(analysis: dict[str, Any]) -> dict[str, Any]:
         "fit_max_s",
         "fit_to",
         "smoothing",
+        "decomposition",
+        "free_energy",
     ):
         if key in analysis:
             payload[key] = analysis[key]

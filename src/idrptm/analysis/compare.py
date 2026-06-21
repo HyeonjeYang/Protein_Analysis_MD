@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from idrptm.analysis.decomposition import ev1_correlation
 from idrptm.analysis.scaling import fit_flory_exponent
 
 
@@ -23,6 +24,9 @@ class RunAnalysis:
     replicate_id: str
     ptm_sites_1based: str
     original_sequence: str
+    cleavage_state: str
+    cut_number: int | None
+    event_time_ns: float | None
     analysis_dir: Path
     rg: pd.DataFrame
     ree: pd.DataFrame
@@ -99,6 +103,8 @@ def compare_project(
         np.save(path, matrix)
         outputs[f"delta_contact_map_{condition}"] = path
 
+    outputs.update(compare_decomposition_outputs(runs, wt_condition, root))
+
     metadata_path = root / "comparison_metadata.json"
     metadata_path.write_text(
         json.dumps(
@@ -168,6 +174,32 @@ def compare_observable(reference: str, variant: str, metric: str) -> ComparisonR
     return ComparisonResult(reference=reference, variant=variant, metric=metric)
 
 
+def compare_decomposition_outputs(
+    runs: tuple[RunAnalysis, ...],
+    wt_condition: str,
+    output_dir: str | Path,
+) -> dict[str, Path]:
+    """Compare optional decomposition outputs across conditions."""
+
+    root = Path(output_dir)
+    outputs: dict[str, Path] = {}
+    ev_outputs = _compare_contact_eigs(runs, wt_condition)
+    if ev_outputs:
+        summary, delta = ev_outputs
+        summary_path = root / "decomposition_comparison.csv"
+        delta_path = root / "delta_ev.csv"
+        summary.to_csv(summary_path, index=False)
+        delta.to_csv(delta_path, index=False)
+        outputs["decomposition_comparison_csv"] = summary_path
+        outputs["delta_ev_csv"] = delta_path
+    centroid = _compare_pca_centroids(runs, wt_condition)
+    if not centroid.empty:
+        path = root / "pca_centroid_shift.csv"
+        centroid.to_csv(path, index=False)
+        outputs["pca_centroid_shift_csv"] = path
+    return outputs
+
+
 def _read_manifest(manifest_path: Path) -> list[dict[str, str]]:
     with manifest_path.open(newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle))
@@ -179,6 +211,7 @@ def _load_run_analysis(project_dir: Path, row: dict[str, str]) -> RunAnalysis:
         raise ValueError("Manifest row is missing variant_id.")
     condition = row.get("condition") or row.get("ptm_state") or variant_id
     replicate_id = row.get("replicate") or variant_id
+    cleavage_metadata = _cleavage_metadata(row)
     analysis_dir = _analysis_dir(project_dir, row, variant_id)
     _require_analysis_files(analysis_dir)
 
@@ -196,6 +229,9 @@ def _load_run_analysis(project_dir: Path, row: dict[str, str]) -> RunAnalysis:
         replicate_id=replicate_id,
         ptm_sites_1based=row.get("ptm_sites_1based", ""),
         original_sequence=row.get("original_sequence", ""),
+        cleavage_state=str(cleavage_metadata["cleavage_state"]),
+        cut_number=cleavage_metadata["cut_number"],
+        event_time_ns=cleavage_metadata["event_time_ns"],
         analysis_dir=analysis_dir,
         rg=rg,
         ree=ree,
@@ -206,6 +242,45 @@ def _load_run_analysis(project_dir: Path, row: dict[str, str]) -> RunAnalysis:
         mean_ree=float(ree["ree"].mean()),
         flory_exponent=exponent,
     )
+
+
+def _cleavage_metadata(row: dict[str, str]) -> dict[str, str | int | float | None]:
+    components = _components_from_row(row)
+    states = sorted(
+        {
+            str(component.get("cleavage_state"))
+            for component in components
+            if component.get("cleavage_state")
+        }
+    )
+    cut_numbers = [
+        int(component["cut_number"])
+        for component in components
+        if component.get("cut_number") not in {None, ""}
+    ]
+    event_times = [
+        float(component["event_time_ns"])
+        for component in components
+        if component.get("event_time_ns") not in {None, ""}
+    ]
+    return {
+        "cleavage_state": ";".join(states),
+        "cut_number": max(cut_numbers) if cut_numbers else None,
+        "event_time_ns": max(event_times) if event_times else None,
+    }
+
+
+def _components_from_row(row: dict[str, str]) -> list[dict[str, object]]:
+    payload = row.get("components_json")
+    if not payload:
+        return []
+    try:
+        parsed = json.loads(payload)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [item for item in parsed if isinstance(item, dict)]
 
 
 def _analysis_dir(project_dir: Path, row: dict[str, str], variant_id: str) -> Path:
@@ -353,6 +428,126 @@ def _aggregate_contact_maps(runs: tuple[RunAnalysis, ...]) -> dict[str, np.ndarr
         maps = np.stack([run.contact_map for run in grouped], axis=0)
         means[condition] = maps.mean(axis=0)
     return means
+
+
+def _compare_contact_eigs(
+    runs: tuple[RunAnalysis, ...],
+    wt_condition: str,
+) -> tuple[pd.DataFrame, pd.DataFrame] | None:
+    by_condition: dict[str, list[pd.DataFrame]] = {}
+    for run in runs:
+        path = run.analysis_dir / "contact_eigs.csv"
+        if path.is_file():
+            by_condition.setdefault(run.condition, []).append(pd.read_csv(path))
+    if wt_condition not in by_condition:
+        return None
+    condition_metadata = _condition_metadata(runs)
+    means = {
+        condition: _mean_ev_tables(tables)
+        for condition, tables in by_condition.items()
+        if tables
+    }
+    wt = means[wt_condition]
+    summary_rows: list[dict[str, float | int | str]] = []
+    delta_rows: list[pd.DataFrame] = []
+    for condition, table in means.items():
+        if condition == wt_condition:
+            continue
+        correlation = ev1_correlation(wt, table)
+        merged = wt[["residue_index", "EV1"]].merge(
+            table[["residue_index", "EV1"]],
+            on="residue_index",
+            suffixes=("_wt", ""),
+        )
+        merged["delta_EV1"] = merged["EV1"] - merged["EV1_wt"]
+        merged["condition"] = condition
+        delta_rows.append(merged[["condition", "residue_index", "EV1_wt", "EV1", "delta_EV1"]])
+        summary_rows.append(
+            {
+                "condition": condition,
+                "wt_condition": wt_condition,
+                **condition_metadata.get(condition, {}),
+                "EV1_correlation": correlation,
+                "n_residues": int(len(merged)),
+            }
+        )
+    if not summary_rows:
+        return None
+    return pd.DataFrame(summary_rows), pd.concat(delta_rows, ignore_index=True)
+
+
+def _mean_ev_tables(tables: list[pd.DataFrame]) -> pd.DataFrame:
+    combined = pd.concat(tables, ignore_index=True)
+    value_columns = [column for column in combined.columns if column.startswith("EV")]
+    grouped = combined.groupby("residue_index", as_index=False)[value_columns].mean()
+    names = combined[["residue_index", "residue_name"]].drop_duplicates("residue_index")
+    return grouped.merge(names, on="residue_index", how="left")
+
+
+def _compare_pca_centroids(runs: tuple[RunAnalysis, ...], wt_condition: str) -> pd.DataFrame:
+    rows: list[dict[str, float | str]] = []
+    condition_metadata = _condition_metadata(runs)
+    for source in ("feature_pca", "contact_pca"):
+        by_condition: dict[str, list[np.ndarray]] = {}
+        for run in runs:
+            path = run.analysis_dir / f"{source}_scores.parquet"
+            if not path.is_file():
+                continue
+            scores = pd.read_parquet(path)
+            if {"PC1", "PC2"}.issubset(scores.columns):
+                by_condition.setdefault(run.condition, []).append(
+                    scores[["PC1", "PC2"]].mean(axis=0).to_numpy(dtype=float)
+                )
+        if wt_condition not in by_condition:
+            continue
+        wt_centroid = np.mean(np.stack(by_condition[wt_condition], axis=0), axis=0)
+        for condition, centroids in by_condition.items():
+            if condition == wt_condition:
+                continue
+            centroid = np.mean(np.stack(centroids, axis=0), axis=0)
+            delta = centroid - wt_centroid
+            rows.append(
+                {
+                    "condition": condition,
+                    "wt_condition": wt_condition,
+                    "source": source,
+                    **condition_metadata.get(condition, {}),
+                    "delta_PC1": float(delta[0]),
+                    "delta_PC2": float(delta[1]),
+                    "centroid_shift": float(np.linalg.norm(delta)),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def _condition_metadata(runs: tuple[object, ...]) -> dict[str, dict[str, float | int | str]]:
+    metadata: dict[str, dict[str, float | int | str]] = {}
+    for condition, grouped in _group_runs(runs).items():
+        states = sorted(
+            {
+                str(getattr(run, "cleavage_state", ""))
+                for run in grouped
+                if getattr(run, "cleavage_state", "")
+            }
+        )
+        cut_numbers: list[int] = []
+        event_times: list[float] = []
+        for run in grouped:
+            cut_number = getattr(run, "cut_number", None)
+            event_time = getattr(run, "event_time_ns", None)
+            if cut_number is not None:
+                cut_numbers.append(int(cut_number))
+            if event_time is not None:
+                event_times.append(float(event_time))
+        row: dict[str, float | int | str] = {}
+        if states:
+            row["cleavage_state"] = ";".join(states)
+        if cut_numbers:
+            row["cut_number"] = int(round(float(np.mean(cut_numbers))))
+        if event_times:
+            row["event_time_ns"] = float(np.mean(event_times))
+        metadata[condition] = row
+    return metadata
 
 
 def _group_runs(runs: tuple[RunAnalysis, ...]) -> dict[str, tuple[RunAnalysis, ...]]:

@@ -24,6 +24,8 @@ def test_cli_help_works() -> None:
     assert "compile" in result.output
     assert "wizard" in result.output
     assert "status" in result.output
+    assert "env-check" in result.output
+    assert "repo-check" in result.output
 
 
 def test_pamd_wrapper_help_works() -> None:

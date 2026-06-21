@@ -154,6 +154,13 @@ ANALYSIS_OUTPUT_UNITS: dict[str, dict[str, str]] = {
         "z_nm": CANONICAL_UNITS["length"],
         "count": "beads",
     },
+    "free_energy": {
+        "x": "variable-dependent",
+        "y": "variable-dependent",
+        "count": "count",
+        "probability": "dimensionless",
+        "free_energy_kj_mol": CANONICAL_UNITS["energy"],
+    },
 }
 
 

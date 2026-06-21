@@ -379,6 +379,13 @@ class RunnerConfig(StrictModel):
     dry_run: bool = True
 
 
+class ExecutionConfig(StrictModel):
+    """Runtime safety policy for launching MD jobs."""
+
+    require_remote_for_md: bool = False
+    expected_hostname_contains: str | None = None
+
+
 class AnalysisConfig(StrictModel):
     """Analysis settings for trajectory observables."""
 
@@ -400,6 +407,8 @@ class AnalysisConfig(StrictModel):
     fit_max_s: int | None = None
     fit_to: Literal["raw", "smoothed"] = "raw"
     smoothing: dict[str, object] = Field(default_factory=dict)
+    decomposition: dict[str, object] = Field(default_factory=dict)
+    free_energy: dict[str, object] = Field(default_factory=dict)
 
 
 class WorkflowConfig(StrictModel):
@@ -413,6 +422,7 @@ class WorkflowConfig(StrictModel):
     system_sets: list[SystemSetConfig] = Field(default_factory=list)
     calvados: CalvadosConfig = Field(default_factory=CalvadosConfig)
     runner: RunnerConfig = Field(default_factory=RunnerConfig)
+    execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
     compiled: dict[str, object] = Field(default_factory=dict)
     units: dict[str, object] = Field(default_factory=dict)

@@ -37,6 +37,9 @@ def test_short_config_compiles_to_locked_config(tmp_path) -> None:
               preset: minimal
             report:
               preset: minimal
+            execution:
+              require_remote_for_md: true
+              expected_hostname_contains: server
             """
         ).strip()
         + "\n",
@@ -51,6 +54,8 @@ def test_short_config_compiles_to_locked_config(tmp_path) -> None:
     assert workflow.project == "short"
     assert workflow.calvados.simulation.n_frames == 5
     assert workflow.calvados.simulation.save_every_steps == 20000
+    assert workflow.execution.require_remote_for_md is True
+    assert workflow.execution.expected_hostname_contains == "server"
     assert workflow.storage_estimate["runs"][0]["run_id"] == "seq__WT"
 
 

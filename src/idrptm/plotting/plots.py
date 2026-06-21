@@ -302,6 +302,185 @@ def plot_energy_timeseries(table: pd.DataFrame) -> plt.Figure:
     return fig
 
 
+def plot_pca_score_scatter(
+    scores: pd.DataFrame,
+    *,
+    x: str = "PC1",
+    y: str = "PC2",
+    color: str | None = "time_ns",
+    title: str = "PCA score scatter",
+) -> plt.Figure:
+    """Plot PC score scatter for exploratory decomposition outputs."""
+
+    fig, ax = plt.subplots(figsize=(5.2, 4.2))
+    if color and color in scores:
+        points = ax.scatter(scores[x], scores[y], c=scores[color], cmap="viridis", s=28)
+        fig.colorbar(points, ax=ax, label=_axis_label(color))
+    else:
+        ax.scatter(scores[x], scores[y], s=28)
+    ax.set_xlabel(x)
+    ax.set_ylabel(y)
+    ax.set_title(title)
+    return fig
+
+
+def plot_pca_timeseries(
+    scores: pd.DataFrame,
+    *,
+    time_column: str = "time_ns",
+    components: tuple[str, ...] = ("PC1", "PC2"),
+    title: str = "PCA score time series",
+) -> plt.Figure:
+    """Plot PC scores over time or frame index."""
+
+    x_column = time_column if time_column in scores else "frame"
+    fig, ax = plt.subplots(figsize=(6, 4))
+    for component in components:
+        if component in scores:
+            ax.plot(scores[x_column], scores[component], marker="o", label=component)
+    ax.set_xlabel(_axis_label(x_column))
+    ax.set_ylabel("PC score (a.u.)")
+    ax.set_title(title)
+    ax.legend(frameon=False)
+    return fig
+
+
+def plot_explained_variance(
+    explained: pd.DataFrame,
+    title: str = "Explained variance",
+) -> plt.Figure:
+    """Plot explained variance ratio by component."""
+
+    fig, ax = plt.subplots(figsize=(5, 3.5))
+    ax.bar(explained["component"], explained["explained_variance_ratio"])
+    ax.set_xlabel("Component")
+    ax.set_ylabel("Explained variance ratio")
+    ax.set_title(title)
+    return fig
+
+
+def plot_contact_loading_heatmap(
+    loadings: np.ndarray,
+    top_contacts: pd.DataFrame,
+    *,
+    component: str = "PC1",
+    title: str = "Contact PCA loading map",
+) -> plt.Figure:
+    """Plot a symmetric residue-pair loading matrix for one contact PCA component."""
+
+    _ = loadings
+    component_rows = top_contacts[top_contacts["component"] == component]
+    if component_rows.empty:
+        return plot_delta_matrix(np.zeros((1, 1)), title)
+    n_residues = int(
+        max(component_rows["residue_i"].max(), component_rows["residue_j"].max())
+    )
+    matrix = np.zeros((n_residues, n_residues), dtype=float)
+    for row in component_rows.itertuples():
+        i = int(row.residue_i) - 1
+        j = int(row.residue_j) - 1
+        matrix[i, j] = matrix[j, i] = float(row.loading)
+    return plot_delta_matrix(matrix, title)
+
+
+def plot_contact_eigenvectors(
+    eigs: pd.DataFrame,
+    *,
+    components: tuple[str, ...] = ("EV1", "EV2"),
+    title: str = "Contact-environment eigenvectors",
+) -> plt.Figure:
+    """Plot contact-environment eigenvectors along sequence."""
+
+    fig, ax = plt.subplots(figsize=(7, 3.5))
+    for component in components:
+        if component in eigs:
+            ax.plot(eigs["residue_index"], eigs[component], label=component)
+    ax.axhline(0, color="0.7", linewidth=0.8)
+    ax.set_xlabel("Residue index (residue)")
+    ax.set_ylabel("Eigenvector value (a.u.)")
+    ax.set_title(title)
+    ax.legend(frameon=False)
+    return fig
+
+
+def plot_delta_ev(
+    delta_ev: pd.DataFrame,
+    *,
+    component: str = "delta_EV1",
+    title: str = "Delta contact-environment eigenvector",
+) -> plt.Figure:
+    """Plot per-residue eigenvector change."""
+
+    fig, ax = plt.subplots(figsize=(7, 3.5))
+    for condition, group in delta_ev.groupby("condition", sort=True):
+        if component in group:
+            ax.plot(group["residue_index"], group[component], label=condition)
+    ax.axhline(0, color="0.7", linewidth=0.8)
+    ax.set_xlabel("Residue index (residue)")
+    ax.set_ylabel(f"{component} (a.u.)")
+    ax.set_title(title)
+    ax.legend(frameon=False)
+    return fig
+
+
+def plot_ev1_correlation(
+    comparison: pd.DataFrame,
+    *,
+    title: str = "EV1 correlation to reference",
+) -> plt.Figure:
+    """Plot EV1 correlation by condition or cleavage-series coordinate."""
+
+    x_column = _series_x_column(comparison)
+    fig, ax = plt.subplots(figsize=(5.5, 3.5))
+    if x_column == "condition":
+        ax.bar(comparison["condition"].astype(str), comparison["EV1_correlation"])
+        ax.tick_params(axis="x", rotation=30)
+    else:
+        ordered = comparison.sort_values(x_column)
+        ax.plot(ordered[x_column], ordered["EV1_correlation"], marker="o")
+    ax.set_xlabel(_axis_label(x_column))
+    ax.set_ylabel("EV1 correlation (dimensionless)")
+    ax.set_title(title)
+    return fig
+
+
+def plot_pca_centroid_shift(
+    shifts: pd.DataFrame,
+    *,
+    title: str = "PCA centroid shift",
+) -> plt.Figure:
+    """Plot PC centroid shifts by condition or cleavage-series coordinate."""
+
+    x_column = _series_x_column(shifts)
+    fig, ax = plt.subplots(figsize=(5.8, 3.6))
+    if x_column == "condition":
+        labels = shifts["condition"].astype(str) + " " + shifts["source"].astype(str)
+        ax.bar(labels, shifts["centroid_shift"])
+        ax.tick_params(axis="x", rotation=30)
+    else:
+        for source, group in shifts.groupby("source", sort=True):
+            ordered = group.sort_values(x_column)
+            ax.plot(ordered[x_column], ordered["centroid_shift"], marker="o", label=source)
+        ax.legend(frameon=False)
+    ax.set_xlabel(_axis_label(x_column))
+    ax.set_ylabel("PC centroid shift (a.u.)")
+    ax.set_title(title)
+    return fig
+
+
+def plot_nmf_residue_weights(weights: pd.DataFrame) -> plt.Figure:
+    """Plot NMF residue module weights along sequence."""
+
+    fig, ax = plt.subplots(figsize=(7, 3.5))
+    for column in [name for name in weights.columns if name.startswith("module_")]:
+        ax.plot(weights["residue_index"], weights[column], label=column)
+    ax.set_xlabel("Residue index (residue)")
+    ax.set_ylabel("Module weight (a.u.)")
+    ax.set_title("Experimental NMF contact modules")
+    ax.legend(frameon=False)
+    return fig
+
+
 def plot_event_schedule(events: pd.DataFrame) -> plt.Figure:
     """Plot cleavage event time versus cut number."""
 
@@ -357,5 +536,15 @@ def _axis_label(column: str) -> str:
         "s": "Sequence separation s (residues)",
         "lag": "Lag (frames)",
         "frame": "Frame (index)",
+        "time_ns": "Time (ns)",
+        "cut_number": "Cut number",
+        "event_time_ns": "Event time (ns)",
     }
     return labels.get(column, column)
+
+
+def _series_x_column(table: pd.DataFrame) -> str:
+    for column in ("cut_number", "event_time_ns"):
+        if column in table and table[column].notna().any():
+            return column
+    return "condition"

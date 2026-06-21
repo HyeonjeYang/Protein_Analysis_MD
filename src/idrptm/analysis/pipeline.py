@@ -13,7 +13,9 @@ import pandas as pd
 
 from idrptm.analysis._validation import as_position_trajectory, pairwise_distances
 from idrptm.analysis.contacts import contact_map_from_positions
+from idrptm.analysis.decomposition import run_decomposition_analysis
 from idrptm.analysis.equilibration import write_equilibration_outputs
+from idrptm.analysis.free_energy import run_free_energy_analysis
 from idrptm.analysis.io import TrajectoryData, load_calvados_trajectory
 from idrptm.analysis.lifetime import contact_lifetime
 from idrptm.analysis.msd import com_msd
@@ -39,6 +41,7 @@ from idrptm.analysis.smoothing import (
 )
 from idrptm.schema import AnalysisConfig, WorkflowConfig, load_config
 from idrptm.units import analysis_output_units, summary_units, write_units_metadata
+from idrptm.visualization.smoothing_policy import validate_smoothing_request
 
 
 @dataclass(frozen=True)
@@ -199,6 +202,30 @@ def analyze_trajectory_data(
             output_path / "contact_lifetime.parquet",
             output_name="contact_lifetime",
         )
+
+    decomposition_outputs = run_decomposition_analysis(
+        output_dir=output_path,
+        positions=positions,
+        frame_table=frame_data,
+        contact_map=contact_map,
+        analysis_config=config,
+        rg=rg,
+        ree=ree,
+        sequence=_trajectory_sequence(trajectory),
+    )
+    outputs.update(decomposition_outputs)
+
+    free_energy_outputs = run_free_energy_analysis(
+        output_dir=output_path,
+        frame_table=frame_data,
+        analysis_config=config,
+        rg=rg,
+        ree=ree,
+    )
+    for path in free_energy_outputs.values():
+        if path.suffix in {".csv", ".npy"}:
+            write_units_metadata(path, analysis_output_units("free_energy"))
+    outputs.update(free_energy_outputs)
 
     chain_ids = trajectory.residue_metadata()["chain_id"]
     if len(set(chain_ids.tolist())) > 1:
@@ -374,6 +401,8 @@ def _summary(
             "min_sequence_separation": analysis_config.min_sequence_separation,
             "max_lag": analysis_config.max_lag,
             "fit_to": analysis_config.fit_to,
+            "decomposition": analysis_config.decomposition,
+            "free_energy": getattr(analysis_config, "free_energy", {}),
         },
         "smoothing": smoothing,
         "rg_mean": float(np.mean(rg)),
@@ -399,7 +428,7 @@ def _enabled_smoothing(config: AnalysisConfig, key: str) -> dict[str, object]:
     smoothing = config.smoothing.get(key, {}) if isinstance(config.smoothing, dict) else {}
     if not isinstance(smoothing, dict) or not smoothing.get("enabled", False):
         return {}
-    return smoothing
+    return validate_smoothing_request(key, smoothing)
 
 
 def _append_logspace_smoothing(
@@ -464,10 +493,16 @@ def _append_timeseries_smoothing(
 
 
 def _summary_smoothing(config: AnalysisConfig) -> dict[str, object]:
-    metadata: dict[str, object] = {}
+    metadata: dict[str, object] = {
+        "policy": "conservative",
+        "raw_data_preserved": True,
+        "quantitative_metrics_use_raw_by_default": config.fit_to == "raw",
+        "contact_map_smoothing_default_enabled": False,
+        "delta_contact_map_smoothing_default_enabled": False,
+    }
     for key, value in (config.smoothing or {}).items():
         if isinstance(value, dict):
-            metadata[key] = dict(value)
+            metadata[key] = validate_smoothing_request(key, value)
     if "ps" in metadata:
         metadata["ps"] |= {
             "raw_column": "p_contact",
@@ -483,6 +518,17 @@ def _summary_smoothing(config: AnalysisConfig) -> dict[str, object]:
     if "ree" in metadata:
         metadata["ree"] |= {"raw_column": "ree", "smoothed_column": "ree_nm_smooth"}
     return metadata
+
+
+def _trajectory_sequence(trajectory: TrajectoryData) -> str | None:
+    """Return a one-letter sequence if future trajectory metadata provides one."""
+
+    metadata = trajectory.residue_metadata()
+    residue_names = metadata.get("residue_name")
+    if residue_names is None:
+        return None
+    sequence = "".join(str(residue) for residue in residue_names)
+    return sequence if len(sequence) == trajectory.n_residues else None
 
 
 def _cache_key(trajectory: TrajectoryData, config: AnalysisConfig) -> dict[str, object]:

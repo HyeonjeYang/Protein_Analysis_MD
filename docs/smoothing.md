@@ -102,3 +102,47 @@ report:
 ```
 
 Figure titles and report text indicate when a smoothed trend is displayed.
+
+## Strict Policy
+
+Raw data are the source of truth. Smoothed values are optional display layers
+unless a user explicitly configures otherwise. Default summary metrics use raw
+values: mean Rg, mean Ree, mean energy, mean contact probability,
+dense/dilute concentration tables, and delta contact maps are not computed from
+display-smoothed data.
+
+Allowed or recommended for visualization:
+
+| Target | Default | Method | Notes |
+| --- | --- | --- | --- |
+| P(s) | On in standard presets | log-space | Stores `p_contact` and `p_contact_smooth`. |
+| R(s) | On in standard presets | log-space | Stores `mean_distance_nm` and `mean_distance_nm_smooth`. |
+| Energy | On in standard presets | rolling | Visual drift/equilibration check. |
+| Rg/Ree time series | Off by default | rolling | Visual trend only. |
+| Density profiles | On for phase presets | Gaussian/rolling | Raw binned profile remains available. |
+| Free-energy display | Optional | binned/KDE-like display smoothing | Raw counts are stored separately. |
+
+Allowed only with strong warnings:
+
+| Target | Default | Rule |
+| --- | --- | --- |
+| Contact maps | Off | Write `contact_map_smoothed.npy`; never use for default deltas. |
+| Observed/expected heatmaps | Off | Display smoothing only. |
+| Delta contact maps | Off | Smooth only after raw delta calculation. |
+| EV1/EV2 tracks | Off | EV correlations use raw eigenvectors. |
+
+Do not smooth by default:
+
+| Target | Reason |
+| --- | --- |
+| Binary contact time series | Would alter state definitions. |
+| Contact lifetime calculations | Quantitative correlation must use raw states. |
+| Cleavage event schedules and Poisson times | Discrete events. |
+| Cut-site positions and fragment boundaries | Discrete sequence coordinates. |
+| Cluster membership/state labels | Categorical labels. |
+| Sequence features, pI/NCPR/FCR/aromaticity | Deterministic sequence values. |
+
+Smoothing metadata records method, window, minimum points, robust/median/mean
+choice, visualization-only status, and whether a value was used for a
+quantitative fit. If smoothing is ever used for a quantitative metric, reports
+must include a warning.

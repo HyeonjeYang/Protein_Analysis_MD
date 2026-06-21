@@ -1,16 +1,79 @@
 .DS_Store
 .coverage
-.pytest_cache/
-.ruff_cache/
+
+# Python
 __pycache__/
 *.egg-info/
 *.py[cod]
+*.so
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Environments
 .venv/
+venv/
+env/
+.env
+*.env
+
+# Build
 build/
 dist/
+htmlcov/
+
+# Local/generated project data
 data/sequences/*.fasta
 data/sequences/*.metadata.json
-htmlcov/
 results/
 runs/
 work/
+outputs/
+trajectories/
+analysis_outputs/
+reports/
+checkpoints/
+logs/
+
+# Generated report/figure outputs
+figures/
+plots/
+report/
+report.html
+report.md
+*.png
+*.pdf
+*.svg
+*.html
+*.units.json
+
+# MD trajectory/checkpoint formats
+*.dcd
+*.xtc
+*.trr
+*.nc
+*.h5
+*.chk
+*.cpt
+*.log
+*.out
+*.err
+
+# Large generated data
+*.npy
+*.npz
+*.parquet
+*.pkl
+*.sqlite
+*.db
+
+# Temporary CALVADOS/OpenMM outputs
+restart.chk
+checkpoint.pdb
+state.xml
+system.xml
+
+# Small tracked fixtures are allowed.
+!tests/fixtures/
+!tests/fixtures/**

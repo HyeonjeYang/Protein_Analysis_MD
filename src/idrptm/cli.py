@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Annotated, Literal, cast
 
@@ -159,6 +160,32 @@ def estimate_size_command(
     typer.echo(format_storage_table(estimate))
 
 
+@app.command("env-check")
+def env_check_command(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Also write machine-readable environment_check.json."),
+    ] = False,
+    output: Annotated[
+        Path,
+        typer.Option("--output", "-o", help="JSON output path when --json is used."),
+    ] = Path("environment_check.json"),
+) -> None:
+    """Show whether commands appear to run locally or on a Remote-SSH host."""
+
+    from protein_analysis_md.environment_check import (
+        collect_environment_info,
+        format_environment_report,
+        write_environment_json,
+    )
+
+    info = collect_environment_info()
+    typer.echo(format_environment_report(info))
+    if json_output:
+        path = write_environment_json(info, output)
+        typer.echo(f"Wrote JSON: {path}")
+
+
 @app.command("compile")
 def compile_command(
     config: Annotated[Path, typer.Argument(help="Short or explicit workflow YAML.")],
@@ -286,6 +313,7 @@ def run_command(
     """Run prepared CALVADOS directories locally through generated run scripts."""
 
     from idrptm.runner import execute_local_runs, plan_local_runs, write_planned_status
+    from protein_analysis_md.environment_check import collect_environment_info
 
     try:
         if phase not in {"equilibration", "production", "all"}:
@@ -296,12 +324,16 @@ def run_command(
             all_runs=all_runs,
             python_executable=python_executable,
         )
+        env_info = collect_environment_info(cwd=target)
+        _print_run_environment_summary(target, plans, env_info)
+        _enforce_execution_policy(target, env_info)
         if dry_run:
             typer.echo(f"Dry run: planned {len(plans)} local run(s).")
             for plan in plans:
                 write_planned_status(plan)
                 typer.echo(f"{plan.run_dir}: {' '.join(plan.command)}")
             return
+        _confirm_local_nontrivial_run(target, env_info)
         results = execute_local_runs(plans)
     except Exception as exc:
         typer.echo(f"Run failed: {exc}", err=True)
@@ -312,6 +344,134 @@ def run_command(
         typer.echo(f"{result.run_dir}: {result.status} ({result.status_json})")
     if failed:
         raise typer.Exit(1)
+
+
+def _print_run_environment_summary(
+    target: Path,
+    plans: tuple[object, ...],
+    env_info: dict[str, object],
+) -> None:
+    estimate = _trajectory_estimate_for_target(target)
+    configured_platform = _configured_platform_for_plans(plans)
+    openmm_platforms = env_info.get("openmm_platforms") or []
+    typer.echo("Execution environment:")
+    typer.echo(f"  hostname: {env_info.get('hostname')}")
+    typer.echo(f"  cwd: {env_info.get('cwd')}")
+    typer.echo(f"  interpretation: {env_info.get('interpretation')}")
+    typer.echo(f"  configured OpenMM platform: {configured_platform or 'unknown'}")
+    typer.echo(
+        "  OpenMM platforms available: "
+        + (", ".join(str(item) for item in openmm_platforms) if openmm_platforms else "unknown")
+    )
+    typer.echo(f"  estimated trajectory size: {_format_size_estimate(estimate)}")
+
+
+def _enforce_execution_policy(target: Path, env_info: dict[str, object]) -> None:
+    policy = _execution_policy_for_target(target)
+    require_remote = bool(policy.get("require_remote_for_md", False))
+    expected = policy.get("expected_hostname_contains")
+    hostname_text = " ".join(
+        str(env_info.get(key) or "") for key in ("hostname", "fqdn")
+    )
+    interpretation = str(env_info.get("interpretation") or "")
+    appears_remote = "remote SSH host" in interpretation
+    if require_remote and not appears_remote:
+        raise ValueError(
+            "execution.require_remote_for_md is true, but env-check did not detect "
+            "SSH/remote execution."
+        )
+    if require_remote and expected and str(expected) not in hostname_text:
+        raise ValueError(
+            "execution.expected_hostname_contains does not match this host: "
+            f"{expected!r}"
+        )
+
+
+def _confirm_local_nontrivial_run(target: Path, env_info: dict[str, object]) -> None:
+    interpretation = str(env_info.get("interpretation") or "")
+    if "running locally" not in interpretation:
+        return
+    estimate = _trajectory_estimate_for_target(target)
+    total_gb = float(estimate.get("total_dcd_gb") or 0.0) if estimate else 0.0
+    if total_gb < 1.0:
+        return
+    message = (
+        "This appears to be running on the local machine. Continue? "
+        f"Estimated DCD output is {total_gb:.3f} GB."
+    )
+    if not typer.confirm(message, default=False):
+        raise typer.Exit(1)
+
+
+def _execution_policy_for_target(target: Path) -> dict[str, object]:
+    project_root = _project_root_for_target(target)
+    if project_root is None:
+        return {}
+    lock = _read_yaml(project_root / "project.lock.yaml")
+    if isinstance(lock.get("execution"), dict):
+        return dict(lock["execution"])
+    resolved = _read_json(project_root / "config_resolved.json")
+    workflow = resolved.get("workflow") if isinstance(resolved, dict) else {}
+    if isinstance(workflow, dict) and isinstance(workflow.get("execution"), dict):
+        return dict(workflow["execution"])
+    return {}
+
+
+def _trajectory_estimate_for_target(target: Path) -> dict[str, object]:
+    project_root = _project_root_for_target(target) or target
+    storage = _read_json(project_root / "storage_estimate.json")
+    return storage if isinstance(storage, dict) else {}
+
+
+def _configured_platform_for_plans(plans: tuple[object, ...]) -> str | None:
+    for plan in plans:
+        run_dir = getattr(plan, "run_dir", None)
+        if run_dir is None:
+            continue
+        config = _read_yaml(Path(run_dir) / "config.yaml")
+        platform_name = config.get("platform")
+        if platform_name:
+            return str(platform_name)
+    return None
+
+
+def _project_root_for_target(target: Path) -> Path | None:
+    path = target.resolve()
+    candidates = [path, *path.parents]
+    for candidate in candidates:
+        if (candidate / "project.lock.yaml").is_file() or (candidate / "manifest.csv").is_file():
+            return candidate
+    return None
+
+
+def _format_size_estimate(estimate: dict[str, object]) -> str:
+    if not estimate:
+        return "unknown"
+    total_gb = estimate.get("total_dcd_gb")
+    warning = estimate.get("warning_level")
+    if total_gb is None:
+        return "unknown"
+    return f"{float(total_gb):.4f} GB DCD ({warning or 'unknown'} warning level)"
+
+
+def _read_yaml(path: Path) -> dict[str, object]:
+    if not path.is_file():
+        return {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _read_json(path: Path) -> dict[str, object]:
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 @app.command("run-recipe")
@@ -663,6 +823,31 @@ def report_command(
 
     typer.echo(f"Wrote report: {result.report_path}")
     typer.echo(f"Wrote {len(result.figure_paths)} figure file(s).")
+
+
+@app.command("repo-check")
+def repo_check_command(
+    output: Annotated[
+        Path,
+        typer.Option("--output", "-o", help="Markdown output path."),
+    ] = Path("REPO_CHECK.md"),
+) -> None:
+    """Run practical public-repository readiness checks."""
+
+    from protein_analysis_md.repo_check import run_repo_check
+
+    try:
+        result = run_repo_check(output_path=output)
+    except Exception as exc:
+        typer.echo(f"Repo check failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(f"Wrote repo check: {result.output_path}")
+    readme = result.findings["readme"]
+    typer.echo(f"README lines: {readme['line_count']}")
+    generated = len(result.findings["generated_files"])
+    tracked_generated = len(result.findings["tracked_generated"])
+    typer.echo(f"Generated/output file warnings: {generated}")
+    typer.echo(f"Tracked generated/output file warnings: {tracked_generated}")
 
 
 def main() -> None:

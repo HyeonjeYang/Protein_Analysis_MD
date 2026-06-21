@@ -1,14 +1,15 @@
 # Third-Party Licenses
 
-`protein_analysis_md` is licensed as GPL-3.0-only. It is designed as a wrapper workflow
-around external scientific software and libraries; it does not vendor CALVADOS
-or dependency source code.
+`protein_analysis_md` is licensed as GPL-3.0-only. It is designed as a wrapper
+workflow around external scientific software and libraries; it does not vendor
+CALVADOS, OpenMM, or dependency source code.
 
 ## Simulation Backend
 
 | Component | Role | License | Source |
 | --- | --- | --- | --- |
-| CALVADOS | External simulation backend | GPL-3.0 | <https://github.com/KULL-Centre/CALVADOS> |
+| CALVADOS | External simulation backend | GPL-3.0-only, confirm upstream for the installed version | <https://github.com/KULL-Centre/CALVADOS> |
+| OpenMM | Simulation engine used by CALVADOS/local environments | Confirm for installed version | <https://openmm.org/> |
 
 Users must install CALVADOS separately. `protein_analysis_md` prepares run directories,
 execution scaffolds, and analysis workflows without modifying upstream CALVADOS.
@@ -26,6 +27,7 @@ execution scaffolds, and analysis workflows without modifying upstream CALVADOS.
 | PyYAML | YAML parsing | MIT |
 | Requests | UniProt/Swiss-Prot HTTP access | Apache-2.0 |
 | MDTraj | Trajectory I/O and analysis helper | LGPL-2.1-or-later |
+| MDAnalysis | Optional trajectory I/O backend when installed | GPL-2.0-or-later, confirm for installed version |
 | PyArrow | Parquet output support | Apache-2.0 |
 | pytest | Test runner | MIT |
 | Ruff | Linting and formatting checks | MIT |

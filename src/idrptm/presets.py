@@ -91,7 +91,15 @@ SIMULATION_PRESETS: dict[SimulationPresetName, dict[str, Any]] = {
 }
 
 ANALYSIS_PRESETS: dict[AnalysisPresetName, dict[str, Any]] = {
-    "minimal": {"observables": ["rg", "ree", "energy"], "smoothing": {}},
+    "minimal": {
+        "observables": ["rg", "ree", "energy"],
+        "smoothing": {
+            "contact_map": {"enabled": False, "visualization_only": True},
+            "delta_contact_map": {"enabled": False, "visualization_only": True},
+        },
+        "decomposition": {"enabled": False},
+        "free_energy": {"enabled": False},
+    },
     "standard_idr": {
         "observables": ["rg", "ree", "contacts", "ps", "scaling", "msd", "energy"],
         "contact_cutoff_nm": 0.8,
@@ -111,6 +119,58 @@ ANALYSIS_PRESETS: dict[AnalysisPresetName, dict[str, Any]] = {
                 "min_points": 5,
                 "robust": True,
             },
+            "energy": {
+                "enabled": True,
+                "method": "rolling",
+                "window": 25,
+                "visualization_only": True,
+            },
+            "contact_map": {
+                "enabled": False,
+                "method": "gaussian",
+                "sigma": 1.0,
+                "visualization_only": True,
+            },
+            "delta_contact_map": {
+                "enabled": False,
+                "method": "gaussian",
+                "sigma": 1.0,
+                "visualization_only": True,
+            },
+        },
+        "free_energy": {"enabled": False},
+        "decomposition": {
+            "enabled": True,
+            "coordinate_pca": {
+                "enabled": False,
+                "remove_com": True,
+                "align": "none",
+                "n_components": 5,
+            },
+            "contact_pca": {
+                "enabled": False,
+                "min_sequence_separation": 2,
+                "standardize_features": True,
+                "n_components": 5,
+            },
+            "distance_pca": {
+                "enabled": False,
+                "transform": "log",
+                "min_sequence_separation": 2,
+                "standardize_features": True,
+                "n_components": 5,
+            },
+            "feature_pca": {"enabled": True, "standardize_features": True, "n_components": 5},
+            "contact_eigs": {
+                "enabled": True,
+                "oe_method": "log_ratio",
+                "eps": 1.0e-6,
+                "min_sequence_separation": 2,
+                "orient_by": "charge_window",
+                "window": 7,
+                "n_eigs": 3,
+            },
+            "nmf": {"enabled": False, "n_modules": 3, "random_seed": 123},
         },
     },
     "standard_cleavage": {
@@ -142,7 +202,58 @@ ANALYSIS_PRESETS: dict[AnalysisPresetName, dict[str, Any]] = {
                 "min_points": 5,
                 "robust": True,
             },
-            "energy": {"enabled": True, "method": "rolling", "window": 25},
+            "energy": {
+                "enabled": True,
+                "method": "rolling",
+                "window": 25,
+                "visualization_only": True,
+            },
+            "contact_map": {
+                "enabled": False,
+                "method": "gaussian",
+                "sigma": 1.0,
+                "visualization_only": True,
+            },
+            "delta_contact_map": {
+                "enabled": False,
+                "method": "gaussian",
+                "sigma": 1.0,
+                "visualization_only": True,
+            },
+        },
+        "free_energy": {"enabled": False},
+        "decomposition": {
+            "enabled": True,
+            "coordinate_pca": {
+                "enabled": False,
+                "remove_com": True,
+                "align": "none",
+                "n_components": 5,
+            },
+            "contact_pca": {
+                "enabled": True,
+                "min_sequence_separation": 2,
+                "standardize_features": True,
+                "n_components": 5,
+            },
+            "distance_pca": {
+                "enabled": False,
+                "transform": "log",
+                "min_sequence_separation": 2,
+                "standardize_features": True,
+                "n_components": 5,
+            },
+            "feature_pca": {"enabled": True, "standardize_features": True, "n_components": 5},
+            "contact_eigs": {
+                "enabled": True,
+                "oe_method": "log_ratio",
+                "eps": 1.0e-6,
+                "min_sequence_separation": 2,
+                "orient_by": "charge_window",
+                "window": 7,
+                "n_eigs": 3,
+            },
+            "nmf": {"enabled": False, "n_modules": 3, "random_seed": 123},
         },
     },
     "standard_phase": {
@@ -156,8 +267,29 @@ ANALYSIS_PRESETS: dict[AnalysisPresetName, dict[str, Any]] = {
         "contact_cutoff_nm": 0.8,
         "min_sequence_separation": 1,
         "smoothing": {
-            "density_profile": {"enabled": True, "method": "rolling", "window": 5},
-            "energy": {"enabled": True, "method": "rolling", "window": 25},
+            "density_profile": {
+                "enabled": True,
+                "method": "gaussian",
+                "sigma_bins": 1.0,
+                "visualization_only": True,
+            },
+            "energy": {
+                "enabled": True,
+                "method": "rolling",
+                "window": 25,
+                "visualization_only": True,
+            },
+            "contact_map": {
+                "enabled": False,
+                "method": "gaussian",
+                "sigma": 1.0,
+                "visualization_only": True,
+            },
+        },
+        "free_energy": {"enabled": False},
+        "decomposition": {
+            "enabled": True,
+            "feature_pca": {"enabled": True, "standardize_features": True, "n_components": 5},
         },
     },
     "full": {
@@ -199,6 +331,52 @@ ANALYSIS_PRESETS: dict[AnalysisPresetName, dict[str, Any]] = {
                 "sigma": 1.0,
                 "visualization_only": True,
             },
+            "delta_contact_map": {
+                "enabled": False,
+                "method": "gaussian",
+                "sigma": 1.0,
+                "visualization_only": True,
+            },
+        },
+        "free_energy": {
+            "enabled": True,
+            "variables": [["Rg", "Ree"]],
+            "bins": 50,
+            "temperature_K": 293.0,
+            "min_count": 1,
+        },
+        "decomposition": {
+            "enabled": True,
+            "coordinate_pca": {
+                "enabled": True,
+                "remove_com": True,
+                "align": "none",
+                "n_components": 5,
+            },
+            "contact_pca": {
+                "enabled": True,
+                "min_sequence_separation": 2,
+                "standardize_features": True,
+                "n_components": 5,
+            },
+            "distance_pca": {
+                "enabled": True,
+                "transform": "log",
+                "min_sequence_separation": 2,
+                "standardize_features": True,
+                "n_components": 5,
+            },
+            "feature_pca": {"enabled": True, "standardize_features": True, "n_components": 5},
+            "contact_eigs": {
+                "enabled": True,
+                "oe_method": "log_ratio",
+                "eps": 1.0e-6,
+                "min_sequence_separation": 2,
+                "orient_by": "charge_window",
+                "window": 7,
+                "n_eigs": 3,
+            },
+            "nmf": {"enabled": False, "n_modules": 3, "random_seed": 123},
         },
     },
 }
@@ -207,6 +385,15 @@ REPORT_PRESETS: dict[ReportPresetName, dict[str, Any]] = {
     "minimal": {
         "formats": ["png"],
         "html": False,
+        "plots": {
+            "single_chain": True,
+            "ptm_comparison": False,
+            "cleavage": False,
+            "phase": False,
+            "heatmaps": True,
+            "decomposition": False,
+            "free_energy": False,
+        },
         "smoothing": {
             "use_smoothed_ps": False,
             "use_smoothed_rs": False,
@@ -218,6 +405,15 @@ REPORT_PRESETS: dict[ReportPresetName, dict[str, Any]] = {
     "standard": {
         "formats": ["png", "pdf"],
         "html": False,
+        "plots": {
+            "single_chain": True,
+            "ptm_comparison": True,
+            "cleavage": True,
+            "phase": True,
+            "heatmaps": True,
+            "decomposition": True,
+            "free_energy": True,
+        },
         "smoothing": {
             "use_smoothed_ps": True,
             "use_smoothed_rs": True,
@@ -229,6 +425,15 @@ REPORT_PRESETS: dict[ReportPresetName, dict[str, Any]] = {
     "publication_draft": {
         "formats": ["png", "pdf"],
         "html": True,
+        "plots": {
+            "single_chain": True,
+            "ptm_comparison": True,
+            "cleavage": True,
+            "phase": True,
+            "heatmaps": True,
+            "decomposition": True,
+            "free_energy": True,
+        },
         "smoothing": {
             "use_smoothed_ps": True,
             "use_smoothed_rs": True,
