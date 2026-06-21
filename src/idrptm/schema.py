@@ -472,6 +472,12 @@ def load_config(path: str | Path) -> WorkflowConfig:
         data = yaml.safe_load(handle)
     if isinstance(data, dict) and "workflow" in data and isinstance(data["workflow"], dict):
         data = data["workflow"]
+    elif isinstance(data, dict) and any(key in data for key in ("input", "protocol", "report")):
+        from idrptm.configuration import compile_config, normalize_config, resolve_presets
+
+        return compile_config(
+            resolve_presets(normalize_config(data, source_path=config_path))
+        ).workflow
     config = WorkflowConfig.model_validate(data)
     if (
         config.sequence is not None
