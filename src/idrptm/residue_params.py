@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import importlib.util
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -216,6 +217,12 @@ def _existing_file(path: Path, label: str) -> Path:
 
 
 def _installed_calvados_residue_csv() -> Path | None:
+    for entry in sys.path:
+        root = Path(entry or ".").resolve() / "calvados"
+        candidate = root / "data" / "residues.csv"
+        if candidate.is_file():
+            return candidate.resolve()
+
     spec = importlib.util.find_spec("calvados")
     if spec is None:
         return None

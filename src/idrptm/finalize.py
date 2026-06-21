@@ -20,6 +20,7 @@ class FinalizeResult:
     comparison_dir: Path | None
     report_path: Path | None
     pymol_dir: Path | None
+    dashboard_path: Path | None
     visualization: bool
 
 
@@ -71,6 +72,10 @@ def finalize_project(
             pymol_result = export_pymol_project(root, include_missing=False, force=True)
             pymol_dir = pymol_result.output_dir
 
+    from idrptm.dashboard import generate_dashboard
+
+    dashboard = generate_dashboard(root)
+
     return FinalizeResult(
         project_dir=root,
         analyzed_runs=tuple(analyzed),
@@ -78,6 +83,7 @@ def finalize_project(
         comparison_dir=comparison.output_dir,
         report_path=report_path,
         pymol_dir=pymol_dir,
+        dashboard_path=dashboard.index_html,
         visualization=visualization_enabled,
     )
 

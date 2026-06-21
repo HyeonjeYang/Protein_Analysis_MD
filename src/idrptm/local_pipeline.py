@@ -537,6 +537,13 @@ def _final_commands(
                 ),
             ]
         )
+    commands.append(
+        (
+            "dashboard",
+            [*_cli_command(python_executable), "dashboard", str(root)],
+            logs / "dashboard.log",
+        )
+    )
     return commands
 
 

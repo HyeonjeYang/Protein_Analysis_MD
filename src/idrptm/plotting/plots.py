@@ -40,7 +40,12 @@ def plot_distribution(
         for condition in conditions
     ]
     fig, ax = plt.subplots(figsize=(max(5, 1.3 * len(conditions)), 4))
-    ax.boxplot(values, tick_labels=conditions, showfliers=False)
+    try:
+        ax.boxplot(values, tick_labels=conditions, showfliers=False)
+    except TypeError as exc:
+        if "tick_labels" not in str(exc):
+            raise
+        ax.boxplot(values, labels=conditions, showfliers=False)
     for index, condition_values in enumerate(values, start=1):
         jitter = np.linspace(-0.08, 0.08, len(condition_values)) if len(condition_values) else []
         ax.scatter(

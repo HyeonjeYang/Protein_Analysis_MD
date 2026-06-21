@@ -30,6 +30,7 @@ def test_cli_help_works() -> None:
     assert "pymol" in result.output
     assert "watch" in result.output
     assert "finalize" in result.output
+    assert "dashboard" in result.output
     assert "pack" in result.output
 
 

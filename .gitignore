@@ -36,6 +36,7 @@ analysis_outputs/
 reports/
 checkpoints/
 logs/
+dashboard/
 pymol/
 pymol_exports/
 

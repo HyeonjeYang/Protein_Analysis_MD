@@ -5,6 +5,7 @@ import json
 import tarfile
 
 from idrptm.bundle import pack_project
+from idrptm.dashboard import generate_dashboard
 from idrptm.watch import format_watch, summarize_watch
 
 
@@ -72,3 +73,25 @@ def test_pack_can_include_trajectories(tmp_path) -> None:
         names = tar.getnames()
     assert any(name.endswith(".dcd") for name in names)
     assert any(name.endswith("top.pdb") for name in names)
+
+
+def test_dashboard_generates_static_html(tmp_path) -> None:
+    project = _project(tmp_path)
+    figures = project / "report" / "figures"
+    figures.mkdir(parents=True)
+    (figures / "rg_distribution.png").write_bytes(b"png")
+    pymol = project / "pymol" / "toy_WT"
+    pymol.mkdir(parents=True)
+    (pymol / "load.pml").write_text("load top.pdb\n", encoding="utf-8")
+
+    result = generate_dashboard(project)
+    html = result.index_html.read_text(encoding="utf-8")
+    data = json.loads(result.data_json.read_text(encoding="utf-8"))
+
+    assert result.index_html.exists()
+    assert "Project Status" in html
+    assert "pamd finalize" in html
+    assert "rg_distribution.png" in html
+    assert "PyMOL" in html
+    assert data["watch"]["n_runs"] == 1
+    assert data["runs"][0]["parameters"].endswith("parameters.txt")

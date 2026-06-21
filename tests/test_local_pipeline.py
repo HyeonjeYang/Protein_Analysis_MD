@@ -101,5 +101,5 @@ def test_final_commands_respect_visualization_flag(tmp_path) -> None:
         visualization=True,
     )
 
-    assert [item[0] for item in without_visuals] == ["compare"]
-    assert [item[0] for item in with_visuals] == ["compare", "report", "pymol"]
+    assert [item[0] for item in without_visuals] == ["compare", "dashboard"]
+    assert [item[0] for item in with_visuals] == ["compare", "report", "pymol", "dashboard"]

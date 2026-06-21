@@ -916,6 +916,50 @@ def watch_command(
         raise typer.Exit(1) from exc
 
 
+@app.command("dashboard")
+def dashboard_command(
+    project_dir: Annotated[Path, typer.Argument(help="Compiled/prepared project directory.")],
+    output_dir: Annotated[
+        Path | None,
+        typer.Option("--output-dir", "-o", help="Dashboard output directory."),
+    ] = None,
+    title: Annotated[
+        str | None,
+        typer.Option("--title", help="Dashboard title."),
+    ] = None,
+    refresh_seconds: Annotated[
+        int | None,
+        typer.Option(
+            "--refresh-s",
+            help="Browser reload interval when the static dashboard is regenerated externally.",
+        ),
+    ] = None,
+    open_browser: Annotated[
+        bool,
+        typer.Option("--open", help="Open the generated dashboard in the default browser."),
+    ] = False,
+) -> None:
+    """Generate a local static HTML dashboard for browser viewing."""
+
+    from idrptm.dashboard import generate_dashboard
+
+    try:
+        result = generate_dashboard(
+            project_dir,
+            output_dir=output_dir,
+            title=title,
+            refresh_seconds=refresh_seconds,
+            open_browser=open_browser,
+        )
+    except Exception as exc:
+        typer.echo(f"Dashboard generation failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(f"Dashboard: {result.index_html}")
+    typer.echo(f"Data: {result.data_json}")
+    if result.opened:
+        typer.echo("Opened in browser.")
+
+
 @app.command("finalize")
 def finalize_command(
     project_dir: Annotated[Path, typer.Argument(help="Compiled/prepared project directory.")],
@@ -971,6 +1015,8 @@ def finalize_command(
         typer.echo(f"Report: {result.report_path}")
     if result.pymol_dir:
         typer.echo(f"PyMOL: {result.pymol_dir}")
+    if result.dashboard_path:
+        typer.echo(f"Dashboard: {result.dashboard_path}")
 
 
 @app.command("clean")

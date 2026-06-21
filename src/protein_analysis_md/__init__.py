@@ -40,6 +40,7 @@ _ALIASES = [
     "calvados_adapter",
     "cleavage",
     "configuration",
+    "dashboard",
     "design",
     "enzymes",
     "environment",

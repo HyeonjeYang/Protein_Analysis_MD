@@ -182,6 +182,22 @@ pamd watch runs/<PROJECT_DIR>
 pamd watch runs/<PROJECT_DIR> --follow
 ```
 
+Create a local browser dashboard for a project:
+
+```bash
+pamd dashboard runs/<PROJECT_DIR>
+open runs/<PROJECT_DIR>/dashboard/index.html        # macOS
+xdg-open runs/<PROJECT_DIR>/dashboard/index.html    # Linux
+start runs\<PROJECT_DIR>\dashboard\index.html       # Windows
+```
+
+The dashboard is a static personal HTML view, not a hosted web deployment. It
+links to run status, figures, comparison files, PyMOL scripts, trajectory
+metadata, and bundles when those outputs exist. Add `--open` to open it from
+the CLI. Run the command again to refresh the snapshot while a long simulation
+is still running; `--refresh-s 30` only reloads the browser page if another
+process is regenerating the static dashboard file.
+
 When simulations are complete, finalize analysis and user-facing outputs:
 
 ```bash
@@ -190,7 +206,8 @@ pamd finalize runs/<PROJECT_DIR>
 
 `visualization: false` in the config, or `pamd finalize --no-visualization`,
 skips report figures and PyMOL export while still allowing analysis/comparison
-data products. Visualization is enabled by default.
+data products. Visualization is enabled by default. `pamd finalize` also
+refreshes the local dashboard.
 
 Create a shareable bundle without heavy trajectories:
 
