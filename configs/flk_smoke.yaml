@@ -1,0 +1,41 @@
+project: flk_smoke
+protein:
+  source: uniprot
+  query: FLK
+  reviewed_only: true
+  organism: Homo sapiens
+  interactive_select: true
+  charge_termini: both
+  region:
+    mode: prompt_if_long
+    max_length_for_full_smoke: 300
+  ptm:
+    mode: wt
+    include_wt: true
+  cleavage_sets:
+    - name: intact
+      mode: none
+      include_intact: true
+      individual_fragments: false
+      fragment_mixture: false
+calvados:
+  model: CALVADOS2
+  temperature_k: 298
+  ionic_m: 0.15
+  ph: 7.4
+  box_nm: [34.4, 34.4, 34.4]
+  platform: CPU
+  simulation:
+    integrator: calvados_default
+    dt_ps: 0.01
+    total_time_ns: 0.5
+    frame_interval_ns: 0.1
+    random_seed: 12345
+runner:
+  backend: local
+  work_dir: runs/flk_smoke
+  dry_run: true
+analysis:
+  contact_cutoff_nm: 1.0
+  min_sequence_separation: 2
+  observables: [rg, ree, contacts, ps, scaling, msd]

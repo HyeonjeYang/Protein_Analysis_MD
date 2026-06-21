@@ -1,4 +1,4 @@
-"""Typed configuration models for idr-ptm-md workflows."""
+"""Typed configuration models for protein_analysis_md workflows."""
 
 from __future__ import annotations
 
@@ -14,8 +14,25 @@ ExecutionBackend = Literal["local", "slurm"]
 Integrator = Literal["calvados_default"]
 SimulationPlatform = Literal["CPU", "CUDA"]
 PlacementMode = Literal["center", "grid", "random", "slab"]
-CleavageMode = Literal["protease", "random", "sequential", "manual"]
-CleavageOrder = Literal["n_to_c", "c_to_n", "random"]
+SequenceSource = Literal["direct", "fasta", "uniprot"]
+CleavageMode = Literal[
+    "none",
+    "protease",
+    "enzyme",
+    "random",
+    "random_ncuts",
+    "sequential",
+    "manual",
+    "end_trimming",
+    "poisson",
+]
+CleavageOrder = Literal["provided", "n_to_c", "c_to_n", "random"]
+CleavageOutput = Literal[
+    "fragment_mixture",
+    "individual_fragments",
+    "state_series",
+    "staged_temporal",
+]
 
 
 class StrictModel(BaseModel):
@@ -27,16 +44,35 @@ class StrictModel(BaseModel):
 class SequenceConfig(StrictModel):
     """Sequence input for a protein or IDR molecule."""
 
-    name: str = Field(..., description="Human-readable sequence identifier.")
+    source: SequenceSource = "direct"
+    name: str | None = Field(None, description="Human-readable sequence identifier.")
     sequence: str | None = Field(None, description="Inline one-letter amino-acid sequence.")
     fasta: Path | None = Field(None, description="Optional FASTA file path.")
+    query: str | None = None
+    accession: str | None = None
+    reviewed_only: bool = True
+    organism: str | None = None
+    interactive_select: bool = False
+    charge_termini: Literal["both", "N", "C", "none"] = "both"
+    region: dict[str, object] | None = None
 
     @model_validator(mode="after")
     def require_exactly_one_sequence_source(self) -> SequenceConfig:
-        """Require either an inline sequence or a FASTA file, not both."""
+        """Validate source-specific sequence inputs."""
 
-        if bool(self.sequence) == bool(self.fasta):
-            raise ValueError("Provide exactly one sequence source: 'sequence' or 'fasta'.")
+        if self.source == "direct":
+            if not self.name:
+                raise ValueError("Direct sequence input requires 'name'.")
+            if not self.sequence or self.fasta is not None:
+                raise ValueError("Direct sequence input requires only 'sequence'.")
+        elif self.source == "fasta":
+            if not self.name:
+                raise ValueError("FASTA sequence input requires 'name'.")
+            if self.fasta is None or self.sequence is not None:
+                raise ValueError("FASTA sequence input requires only 'fasta'.")
+        elif self.source == "uniprot":
+            if not self.query and not self.accession:
+                raise ValueError("UniProt sequence input requires 'query' or 'accession'.")
         return self
 
 
@@ -116,7 +152,9 @@ class CleavageSet(StrictModel):
     name: str
     mode: CleavageMode
     protease: str | ProteaseRule | None = None
+    enzyme: str | ProteaseRule | None = None
     manual_cuts: list[int] = Field(default_factory=list)
+    cut_after_sites: list[int] = Field(default_factory=list)
     missed_cleavages: int = Field(0, ge=0)
     cleavage_probability: float = Field(1.0, ge=0, le=1)
     n_cuts: int | None = Field(None, ge=0)
@@ -128,17 +166,43 @@ class CleavageSet(StrictModel):
     individual_fragments: bool = True
     fragment_mixture: bool = True
     sequential_series: bool = False
+    output: CleavageOutput | None = None
+    candidate_sites: str | list[int] | None = None
+    rate_model: str | None = None
+    global_rate_per_ns: float | None = Field(None, gt=0)
+    site_rate_per_ns: float | None = Field(None, gt=0)
+    max_time_ns: float | None = Field(None, gt=0)
+    max_cuts: int | None = Field(None, ge=0)
+    terminus: Literal["N", "C"] | None = None
+    step_size: int | None = Field(None, gt=0)
+    max_removed: int | None = Field(None, ge=0)
 
     @model_validator(mode="after")
     def validate_mode_options(self) -> CleavageSet:
         """Validate mode-specific cleavage inputs."""
 
-        if self.mode == "protease" and self.protease is None:
-            raise ValueError("Cleavage mode 'protease' requires a protease rule.")
+        if self.enzyme is not None and self.protease is None:
+            self.protease = self.enzyme
+        if self.cut_after_sites and not self.manual_cuts:
+            self.manual_cuts = self.cut_after_sites
+        if self.output is not None:
+            self.individual_fragments = self.output == "individual_fragments"
+            self.fragment_mixture = self.output in {
+                "fragment_mixture",
+                "state_series",
+                "staged_temporal",
+            }
+            self.sequential_series = self.output in {"state_series", "staged_temporal"}
+        if self.mode in {"protease", "enzyme"} and self.protease is None:
+            raise ValueError("Cleavage mode 'protease'/'enzyme' requires an enzyme rule.")
         if self.mode == "manual" and not self.manual_cuts:
             raise ValueError("Cleavage mode 'manual' requires manual_cuts.")
-        if self.mode == "sequential":
+        if self.mode in {"random_ncuts", "poisson"} and self.n_cuts is None and self.max_cuts:
+            self.n_cuts = self.max_cuts
+        if self.mode in {"sequential", "poisson"}:
             self.sequential_series = True
+        if self.mode == "end_trimming" and (self.terminus is None or self.step_size is None):
+            raise ValueError("Cleavage mode 'end_trimming' requires terminus and step_size.")
         return self
 
 
@@ -334,7 +398,7 @@ class AnalysisConfig(StrictModel):
 
 
 class WorkflowConfig(StrictModel):
-    """Top-level idr-ptm-md workflow configuration."""
+    """Top-level protein_analysis_md workflow configuration."""
 
     project: str
     sequence: SequenceConfig | None = None
@@ -374,8 +438,16 @@ class WorkflowConfig(StrictModel):
             self.proteins = [
                 ProteinConfig(
                     name=self.sequence.name,
+                    source=self.sequence.source,
                     sequence=self.sequence.sequence,
                     fasta=self.sequence.fasta,
+                    query=self.sequence.query,
+                    accession=self.sequence.accession,
+                    reviewed_only=self.sequence.reviewed_only,
+                    organism=self.sequence.organism,
+                    interactive_select=self.sequence.interactive_select,
+                    charge_termini=self.sequence.charge_termini,
+                    region=self.sequence.region,
                     ptm=self.ptm,
                     molecule_type=self.calvados.molecule_type,
                 )

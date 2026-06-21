@@ -31,6 +31,7 @@ class CleavageState:
     cuts: tuple[int, ...]
     sites: tuple[CleavageSite, ...]
     products: tuple[CleavageProduct, ...]
+    event_time_ns: float | None = None
 
 
 def protease_candidate_cuts(sequence: str, rule: str | ProteaseRule) -> tuple[int, ...]:
@@ -46,8 +47,14 @@ def protease_candidate_cuts(sequence: str, rule: str | ProteaseRule) -> tuple[in
         return _cuts_after_residues(normalized, {"R"})
     if rule_name == "chymotrypsin_high_simple":
         return _cuts_after_residues(normalized, {"F", "Y", "W"}, block_before={"P"})
+    if rule_name == "chymotrypsin_low_simple":
+        return _cuts_after_residues(normalized, {"F", "Y", "W", "L", "M", "H"}, block_before={"P"})
     if rule_name == "cnbr_simple":
         return _cuts_after_residues(normalized, {"M"})
+    if rule_name == "glu_c_simple":
+        return _cuts_after_residues(normalized, {"E"})
+    if rule_name == "asp_n_simple":
+        return _cuts_before_residues(normalized, {"D"})
     if rule_name == "tev_simple":
         return _tev_cuts(normalized)
     raise ValueError(f"Unsupported protease rule: {rule_name}")
@@ -63,6 +70,29 @@ def generate_cleavage_states(
 
     normalized = normalize_raw_sequence(sequence)
     rng = np.random.default_rng(cleavage_set.seed)
+    if cleavage_set.mode == "none":
+        return (
+            _state_from_cuts(
+                normalized,
+                cleavage_set,
+                cuts=(),
+                cut_number=0,
+                ptm_sites=ptm_sites,
+            ),
+        )
+    if cleavage_set.mode == "poisson":
+        events = poisson_cleavage_events(normalized, cleavage_set, rng=rng)
+        return tuple(
+            _state_from_cuts(
+                normalized,
+                cleavage_set,
+                cuts=tuple(sorted(event.cut_after for event in events[:index])),
+                cut_number=index,
+                ptm_sites=ptm_sites,
+                event_time_ns=events[index - 1].event_time_ns,
+            )
+            for index in range(1, len(events) + 1)
+        )
     cuts = _select_cuts(normalized, cleavage_set, rng)
     if cleavage_set.mode == "sequential" or cleavage_set.sequential_series:
         ordered = _ordered_cuts(cuts, cleavage_set.order, rng)
@@ -149,6 +179,60 @@ def write_fragments_fasta(
     return output_path
 
 
+@dataclass(frozen=True)
+class CleavageEvent:
+    """One scheduled quasi-dynamic cleavage event."""
+
+    event_index: int
+    event_time_ns: float
+    cut_after: int
+
+
+def poisson_cleavage_events(
+    sequence: str,
+    cleavage_set: CleavageSet,
+    *,
+    rng: np.random.Generator | None = None,
+) -> tuple[CleavageEvent, ...]:
+    """Generate a reproducible Poisson cleavage event schedule."""
+
+    generator = rng or np.random.default_rng(cleavage_set.seed)
+    normalized = normalize_raw_sequence(sequence)
+    candidates = _poisson_candidates(normalized, cleavage_set)
+    max_time = cleavage_set.max_time_ns or 0.0
+    max_cuts = cleavage_set.max_cuts if cleavage_set.max_cuts is not None else cleavage_set.n_cuts
+    max_cuts = max_cuts if max_cuts is not None else len(candidates)
+    if max_time <= 0 or max_cuts <= 0:
+        return ()
+    site_rate = _site_rate(cleavage_set, len(candidates))
+    current_time = 0.0
+    selected: list[int] = []
+    events: list[CleavageEvent] = []
+    remaining = list(candidates)
+    while remaining and len(events) < max_cuts:
+        total_rate = site_rate * len(remaining)
+        current_time += float(generator.exponential(1.0 / total_rate))
+        if current_time > max_time:
+            break
+        cut = int(generator.choice(remaining))
+        trial = sorted([*selected, cut])
+        if _base_fragments_satisfy_min_length(
+            trial,
+            sequence_length=len(normalized),
+            min_fragment_length=cleavage_set.min_fragment_length,
+        ):
+            selected.append(cut)
+            events.append(
+                CleavageEvent(
+                    event_index=len(events) + 1,
+                    event_time_ns=current_time,
+                    cut_after=cut,
+                )
+            )
+        remaining = [candidate for candidate in remaining if candidate not in selected]
+    return tuple(events)
+
+
 def _format_fragment_fasta(product: CleavageProduct) -> str:
     header = (
         f"{sanitize_identifier(product.fragment_id)} "
@@ -168,15 +252,17 @@ def _select_cuts(
     cleavage_set: CleavageSet,
     rng: np.random.Generator,
 ) -> tuple[int, ...]:
-    if cleavage_set.mode == "protease":
+    if cleavage_set.mode in {"protease", "enzyme"}:
         assert cleavage_set.protease is not None
         candidates = protease_candidate_cuts(sequence, cleavage_set.protease)
     elif cleavage_set.mode == "manual":
         candidates = tuple(cleavage_set.manual_cuts)
-    elif cleavage_set.mode == "random":
+    elif cleavage_set.mode in {"random", "random_ncuts"}:
         candidates = tuple(range(1, len(sequence)))
     elif cleavage_set.mode == "sequential":
         candidates = _sequential_candidates(sequence, cleavage_set)
+    elif cleavage_set.mode == "end_trimming":
+        candidates = _end_trimming_cuts(sequence, cleavage_set)
     else:
         raise ValueError(f"Unsupported cleavage mode: {cleavage_set.mode}")
 
@@ -185,7 +271,7 @@ def _select_cuts(
         candidates = tuple(
             cut for cut in candidates if rng.random() <= cleavage_set.cleavage_probability
         )
-    if cleavage_set.mode == "random":
+    if cleavage_set.mode in {"random", "random_ncuts"}:
         n_cuts = cleavage_set.n_cuts if cleavage_set.n_cuts is not None else 1
         return _random_cuts(
             candidates,
@@ -214,6 +300,7 @@ def _state_from_cuts(
     cuts: tuple[int, ...],
     cut_number: int,
     ptm_sites: tuple[AppliedPTM, ...],
+    event_time_ns: float | None = None,
 ) -> CleavageState:
     products = fragments_from_cuts(
         sequence,
@@ -230,6 +317,7 @@ def _state_from_cuts(
         cuts=tuple(sorted(cuts)),
         sites=_sites_from_cuts(sequence, cuts, _rule_name(cleavage_set.protease)),
         products=products,
+        event_time_ns=event_time_ns,
     )
 
 
@@ -247,6 +335,14 @@ def _cuts_after_residues(
     return tuple(cuts)
 
 
+def _cuts_before_residues(sequence: str, residues: set[str]) -> tuple[int, ...]:
+    return tuple(
+        index
+        for index, residue in enumerate(sequence[1:], start=1)
+        if residue in residues
+    )
+
+
 def _tev_cuts(sequence: str) -> tuple[int, ...]:
     cuts = []
     for index in range(0, len(sequence) - 6):
@@ -258,6 +354,42 @@ def _tev_cuts(sequence: str) -> tuple[int, ...]:
         ):
             cuts.append(index + 6)
     return tuple(cuts)
+
+
+def _end_trimming_cuts(sequence: str, cleavage_set: CleavageSet) -> tuple[int, ...]:
+    assert cleavage_set.terminus is not None
+    assert cleavage_set.step_size is not None
+    max_removed = (
+        cleavage_set.max_removed
+        if cleavage_set.max_removed is not None
+        else len(sequence) - 1
+    )
+    values = range(
+        cleavage_set.step_size,
+        min(max_removed, len(sequence) - 1) + 1,
+        cleavage_set.step_size,
+    )
+    if cleavage_set.terminus == "N":
+        return tuple(values)
+    return tuple(len(sequence) - value for value in values)
+
+
+def _poisson_candidates(sequence: str, cleavage_set: CleavageSet) -> tuple[int, ...]:
+    if cleavage_set.candidate_sites == "enzyme" and cleavage_set.protease is not None:
+        return protease_candidate_cuts(sequence, cleavage_set.protease)
+    if isinstance(cleavage_set.candidate_sites, list):
+        return _valid_cut_set(cleavage_set.candidate_sites, len(sequence))
+    if cleavage_set.manual_cuts:
+        return _valid_cut_set(cleavage_set.manual_cuts, len(sequence))
+    return tuple(range(1, len(sequence)))
+
+
+def _site_rate(cleavage_set: CleavageSet, n_candidates: int) -> float:
+    if cleavage_set.site_rate_per_ns is not None:
+        return cleavage_set.site_rate_per_ns
+    if cleavage_set.global_rate_per_ns is not None and n_candidates > 0:
+        return cleavage_set.global_rate_per_ns / n_candidates
+    return 0.01
 
 
 def _valid_cut_set(cuts: tuple[int, ...] | list[int], sequence_length: int) -> tuple[int, ...]:

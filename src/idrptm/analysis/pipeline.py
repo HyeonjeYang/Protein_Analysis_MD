@@ -197,7 +197,7 @@ def _write_parquet(table: pd.DataFrame, path: Path, *, output_name: str) -> Path
     except ImportError as exc:
         raise ImportError(
             "Writing parquet outputs requires pyarrow or fastparquet. "
-            "Install the declared idr-ptm-md dependencies."
+            "Install the declared protein_analysis_md dependencies."
         ) from exc
     write_units_metadata(path, units)
     return path

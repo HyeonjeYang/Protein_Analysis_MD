@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -51,6 +52,12 @@ class SequenceRecord:
         """Sequence length in residues."""
 
         return len(self.sequence)
+
+    @property
+    def sequence_hash(self) -> str:
+        """Stable SHA-256 hash of the normalized sequence."""
+
+        return hashlib.sha256(self.sequence.encode("utf-8")).hexdigest()
 
 
 def parse_raw_sequence(name: str, sequence: str, description: str = "") -> SequenceRecord:

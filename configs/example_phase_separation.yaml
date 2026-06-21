@@ -1,0 +1,18 @@
+project: example_phase_separation
+proteins:
+  - source: direct
+    name: ProteinA
+    sequence: MSSSSPSTKRGGGRKSSS
+system_sets:
+  - name: ProteinA_slab
+    placement: slab
+    components:
+      - protein: ProteinA
+        ptm_state: WT
+        copies: 100
+calvados:
+  model: CALVADOS2
+  topol: slab
+  box_nm: [25.0, 25.0, 120.0]
+runner:
+  work_dir: runs/example_phase_separation

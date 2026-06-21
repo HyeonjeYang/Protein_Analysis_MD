@@ -28,6 +28,7 @@ from idrptm.sequence import (
     normalize_raw_sequence,
     sanitize_identifier,
 )
+from idrptm.uniprot import fetch_sequence
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,7 @@ class DesignedComponent:
     cleavage_cuts: tuple[int, ...] = ()
     cleavage_sites: tuple[CleavageSite, ...] = ()
     cut_number: int = 0
+    event_time_ns: float | None = None
 
     @property
     def is_wild_type(self) -> bool:
@@ -168,19 +170,14 @@ def load_configured_sequence(config: WorkflowConfig) -> SequenceRecord:
     """Load the first sequence configured for a workflow."""
 
     protein = config.proteins[0]
-    return load_single_sequence(
-        name=protein.name,
-        sequence=protein.sequence,
-        fasta=protein.fasta,
-    )
+    return _load_protein_sequence(protein)
 
 
 def load_configured_proteins(config: WorkflowConfig) -> tuple[SequenceRecord, ...]:
     """Load all protein sequences configured for a workflow."""
 
     return tuple(
-        load_single_sequence(name=protein.name, sequence=protein.sequence, fasta=protein.fasta)
-        for protein in config.proteins
+        _load_protein_sequence(protein) for protein in config.proteins
     )
 
 
@@ -242,16 +239,35 @@ def _protein_variant_catalog(
 ) -> dict[str, dict[str, DesignedComponent]]:
     catalog: dict[str, dict[str, DesignedComponent]] = {}
     for protein in config.proteins:
-        sequence = load_single_sequence(
-            name=protein.name,
-            sequence=protein.sequence,
-            fasta=protein.fasta,
-        )
+        sequence = _load_protein_sequence(protein)
         variants = _design_protein_components(protein, sequence)
         catalog[sequence.name] = {component.ptm_state.name: component for component in variants}
         for component in variants:
             catalog[sequence.name][component.protein_variant_id] = component
     return catalog
+
+
+def _load_protein_sequence(protein: ProteinConfig) -> SequenceRecord:
+    if protein.source == "uniprot":
+        result = fetch_sequence(
+            protein.query or protein.accession or "",
+            accession=protein.accession,
+            reviewed=protein.reviewed_only,
+            organism=protein.organism,
+            interactive=protein.interactive_select,
+            yes=not protein.interactive_select,
+        )
+        return SequenceRecord(
+            name=protein.name or result.candidate.entry_name or result.candidate.accession,
+            sequence=result.candidate.sequence or "",
+            description=f"UniProt {result.candidate.accession}",
+        )
+    assert protein.name is not None
+    return load_single_sequence(
+        name=protein.name,
+        sequence=protein.sequence,
+        fasta=protein.fasta,
+    )
 
 
 def _design_protein_components(
@@ -355,9 +371,10 @@ def _design_system_sets(
                     original_start=base_component.original_start,
                     original_end=base_component.original_end,
                     original_indices=base_component.original_indices,
-                    cleavage_cuts=base_component.cleavage_cuts,
-                    cleavage_sites=base_component.cleavage_sites,
-                    cut_number=base_component.cut_number,
+                cleavage_cuts=base_component.cleavage_cuts,
+                cleavage_sites=base_component.cleavage_sites,
+                cut_number=base_component.cut_number,
+                event_time_ns=base_component.event_time_ns,
                 )
             )
         variant_id = _system_variant_id(system_set.name, tuple(components))
@@ -458,6 +475,7 @@ def _fragment_components_for_state(
                 cleavage_cuts=tuple(state.cuts),
                 cleavage_sites=tuple(state.sites),
                 cut_number=state.cut_number,
+                event_time_ns=state.event_time_ns,
             )
         )
     return tuple(fragments)
@@ -541,6 +559,7 @@ def _metadata_dict(config: WorkflowConfig, variant: DesignedVariant) -> dict[str
         "placement": variant.placement,
         "is_multi_component": variant.is_multi_component,
         "base_sequence_name": variant.base_sequence.name,
+        "sequence_hash": variant.base_sequence.sequence_hash,
         "original_sequence": variant.original_sequence,
         "simulation_sequence": variant.simulation_sequence,
         "ptms": [
@@ -588,6 +607,7 @@ def _component_metadata(component: DesignedComponent) -> dict[str, object]:
         "original_indices": list(component.original_indices),
         "cleavage_cuts": list(component.cleavage_cuts),
         "cut_number": component.cut_number,
+        "event_time_ns": component.event_time_ns,
     }
 
 
@@ -635,6 +655,7 @@ def write_design_outputs(
                 ),
                 "placement": variant.placement,
                 "base_sequence_name": variant.base_sequence.name,
+                "sequence_hash": variant.base_sequence.sequence_hash,
                 "ptm_state": variant.ptm_state.name,
                 "ptm_count": len(variant.ptm_state.sites),
                 "ptm_sites_1based": _site_summary_1based(variant),
@@ -662,6 +683,7 @@ def write_design_outputs(
         "total_molecule_copies",
         "placement",
         "base_sequence_name",
+        "sequence_hash",
         "ptm_state",
         "ptm_count",
         "ptm_sites_1based",
@@ -761,6 +783,7 @@ def _write_cleavage_sites_csv(variants: tuple[DesignedVariant, ...], path: Path)
                     "cleavage_set": component.cleavage_set_name,
                     "cleavage_state": component.cleavage_state_name,
                     "cut_number": component.cut_number,
+                    "event_time_ns": component.event_time_ns,
                     "cut_after": site.cut_after,
                     "n_terminal_residue": site.n_terminal_residue,
                     "c_terminal_residue": site.c_terminal_residue,
@@ -773,6 +796,7 @@ def _write_cleavage_sites_csv(variants: tuple[DesignedVariant, ...], path: Path)
         "cleavage_set",
         "cleavage_state",
         "cut_number",
+        "event_time_ns",
         "cut_after",
         "n_terminal_residue",
         "c_terminal_residue",

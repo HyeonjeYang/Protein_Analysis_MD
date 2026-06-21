@@ -252,6 +252,32 @@ def plot_cut_number_summary(
     return fig
 
 
+def plot_energy_timeseries(table: pd.DataFrame) -> plt.Figure:
+    """Plot potential energy and optional temperature over time."""
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    if "potential_energy_kj_mol" in table:
+        ax.plot(table["time_ns"], table["potential_energy_kj_mol"], label="Potential energy")
+    if "total_energy_kj_mol" in table:
+        ax.plot(table["time_ns"], table["total_energy_kj_mol"], label="Total energy")
+    ax.set_xlabel("Time (ns)")
+    ax.set_ylabel("Energy (kJ/mol)")
+    ax.set_title("Energy timeseries")
+    ax.legend(frameon=False)
+    return fig
+
+
+def plot_event_schedule(events: pd.DataFrame) -> plt.Figure:
+    """Plot cleavage event time versus cut number."""
+
+    fig, ax = plt.subplots(figsize=(5.5, 4))
+    ax.step(events["event_time_ns"], events["cut_number"], where="post")
+    ax.set_xlabel("Event time (ns)")
+    ax.set_ylabel("Cut number (count)")
+    ax.set_title("Cleavage event schedule")
+    return fig
+
+
 def plot_summary_table(summary: pd.DataFrame) -> plt.Figure:
     """Render the scalar comparison summary as a compact table."""
 

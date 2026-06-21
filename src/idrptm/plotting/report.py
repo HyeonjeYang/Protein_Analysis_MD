@@ -25,7 +25,7 @@ class ReportPlan:
     """A planned report artifact."""
 
     output: Path
-    title: str = "idr-ptm-md report"
+    title: str = "protein_analysis_md report"
 
 
 @dataclass(frozen=True)
@@ -38,7 +38,7 @@ class ReportResult:
     comparison: ProjectComparison
 
 
-def build_report_plan(output: str | Path, title: str = "idr-ptm-md report") -> ReportPlan:
+def build_report_plan(output: str | Path, title: str = "protein_analysis_md report") -> ReportPlan:
     """Create a report plan."""
 
     return ReportPlan(output=Path(output), title=title)
@@ -187,7 +187,7 @@ def _report_markdown(
     figure_paths: list[Path],
 ) -> str:
     lines = [
-        "# idr-ptm-md report",
+        "# protein_analysis_md report",
         "",
         f"Project directory: `{project_dir}`",
         f"WT condition: `{comparison.wt_condition}`",

@@ -1,0 +1,18 @@
+name: protein_analysis_md
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - numpy
+  - pandas
+  - scipy
+  - matplotlib
+  - pydantic
+  - typer
+  - pyyaml
+  - requests
+  - mdtraj
+  - pyarrow
+  - pytest
+  - ruff
+  - pip

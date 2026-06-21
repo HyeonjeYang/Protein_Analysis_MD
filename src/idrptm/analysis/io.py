@@ -110,7 +110,7 @@ def _load_with_mdtraj(topology_path: Path, trajectory_path: Path) -> TrajectoryD
     except ImportError as exc:
         raise ImportError(
             "mdtraj is required to load CALVADOS trajectories. "
-            "Install idr-ptm-md with its analysis dependencies."
+            "Install protein_analysis_md with its analysis dependencies."
         ) from exc
 
     loaded = md.load(str(trajectory_path), top=str(topology_path))

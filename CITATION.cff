@@ -1,13 +1,13 @@
 cff-version: 1.2.0
-message: "If you use idr-ptm-md, cite this repository and the CALVADOS papers relevant to the backend/model you used."
+message: "If you use protein_analysis_md, cite this repository and the CALVADOS papers relevant to the backend/model you used."
 type: software
-title: "idr-ptm-md"
+title: "protein_analysis_md"
 version: "0.1.0"
 license: "GPL-3.0-only"
 abstract: "A Python research workflow framework for sequence- and PTM-dependent coarse-grained MD of IDRs/proteins using CALVADOS as the simulation backend."
-repository-code: "https://github.com/idromptm/idr-ptm-md"
+repository-code: "https://github.com/idromptm/protein_analysis_md"
 authors:
-  - name: "idr-ptm-md contributors"
+  - name: "protein_analysis_md contributors"
 keywords:
   - "CALVADOS"
   - "coarse-grained molecular dynamics"

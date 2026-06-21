@@ -1,0 +1,37 @@
+project: enzyme_cleavage_example
+protein:
+  source: direct
+  name: ExampleIDR
+  sequence: MSSSSPSTKRGGGRKSSSYSPTSPKKRSGGGG
+  ptm:
+    mode: explicit
+    include_wt: true
+    sites:
+      - position: 4
+        residue: S
+        ptm: pSer
+      - position: 8
+        residue: T
+        ptm: pThr
+  cleavage_sets:
+    - name: trypsin_one_shot
+      mode: enzyme
+      enzyme: trypsin_simple
+      missed_cleavages: 0
+      min_fragment_length: 5
+      output: fragment_mixture
+    - name: trypsin_poisson_temporal
+      mode: poisson
+      candidate_sites: enzyme
+      enzyme: trypsin_simple
+      rate_model: motif
+      site_rate_per_ns: 0.02
+      max_time_ns: 100
+      max_cuts: 5
+      seed: 123
+      min_fragment_length: 5
+      output: staged_temporal
+calvados:
+  model: CALVADOS2-pIDR
+runner:
+  work_dir: runs/enzyme_cleavage_example

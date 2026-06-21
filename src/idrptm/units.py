@@ -122,6 +122,18 @@ ANALYSIS_OUTPUT_UNITS: dict[str, dict[str, str]] = {
         "contact_probability": CANONICAL_UNITS["contact_probability"],
         "residue_index": "original sequence residue",
     },
+    "energy": {
+        "time_ns": "ns",
+        "step": "count",
+        "potential_energy_kj_mol": CANONICAL_UNITS["energy"],
+        "kinetic_energy_kj_mol": CANONICAL_UNITS["energy"],
+        "total_energy_kj_mol": CANONICAL_UNITS["energy"],
+        "temperature_K": CANONICAL_UNITS["temperature"],
+    },
+    "phase_density": {
+        "z_nm": CANONICAL_UNITS["length"],
+        "count": "beads",
+    },
 }
 
 

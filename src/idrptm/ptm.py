@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
+
+import pandas as pd
 
 SupportedPTM = Literal["pSer", "pThr"]
 SUPPORTED_PTMS: tuple[SupportedPTM, ...] = ("pSer", "pThr")
@@ -159,3 +162,66 @@ def apply_ptms(
     """Apply pSer/pThr requests using the default MVP registry."""
 
     return registry.apply(original_sequence=original_sequence, requests=requests)
+
+
+def parse_ptm_file(path: str | Path) -> tuple[PTMRequest, ...]:
+    """Parse TXT/TSV/CSV PTM site files with line-numbered errors."""
+
+    input_path = Path(path)
+    requests: list[PTMRequest] = []
+    lines = input_path.read_text(encoding="utf-8").splitlines()
+    header: list[str] | None = None
+    for line_number, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        parts = _split_ptm_line(stripped)
+        if header is None and {"site", "residue", "ptm"}.issubset({part.lower() for part in parts}):
+            header = [part.lower() for part in parts]
+            continue
+        try:
+            if header is not None:
+                values = dict(zip(header, parts, strict=False))
+                site = int(values["site"])
+                residue = values["residue"]
+                ptm = values["ptm"]
+            else:
+                site = int(parts[0])
+                residue = parts[1]
+                ptm = parts[2]
+            requests.append(
+                PTMRequest(
+                    biological_position=site,
+                    ptm=validate_supported_ptm(ptm),
+                    expected_residue=residue,
+                )
+            )
+        except Exception as exc:
+            raise ValueError(
+                f"Invalid PTM file {input_path} at line {line_number}: {line}"
+            ) from exc
+    return tuple(requests)
+
+
+def build_ptm_table(sites: tuple[AppliedPTM, ...]) -> pd.DataFrame:
+    """Build a PTM metadata table."""
+
+    return pd.DataFrame(
+        [
+            {
+                "site": site.biological_position,
+                "zero_based_index": site.zero_based_index,
+                "residue": site.source_residue,
+                "ptm": site.ptm,
+                "simulation_code": site.simulation_code,
+            }
+            for site in sites
+        ],
+        columns=["site", "zero_based_index", "residue", "ptm", "simulation_code"],
+    )
+
+
+def _split_ptm_line(line: str) -> list[str]:
+    if "," in line:
+        return [part.strip() for part in line.split(",")]
+    return line.split()

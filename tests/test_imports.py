@@ -5,9 +5,11 @@ import importlib
 
 def test_package_imports() -> None:
     import idrptm
+    import protein_analysis_md
 
     assert idrptm.__version__
     assert idrptm.SUPPORTED_MVP_PTMS == ("pSer", "pThr")
+    assert protein_analysis_md.__version__ == idrptm.__version__
 
 
 def test_stage_1_modules_import() -> None:
@@ -22,8 +24,18 @@ def test_stage_1_modules_import() -> None:
         "idrptm.runner",
         "idrptm.hpc",
         "idrptm.units",
+        "idrptm.storage",
+        "idrptm.uniprot",
+        "idrptm.enzymes",
+        "idrptm.environment",
+        "idrptm.sequence_features",
+        "protein_analysis_md",
+        "protein_analysis_md.schema",
+        "protein_analysis_md.analysis.rg",
         "idrptm.analysis.io",
         "idrptm.analysis.cleavage",
+        "idrptm.analysis.energy",
+        "idrptm.analysis.phase",
         "idrptm.analysis.rg",
         "idrptm.analysis.ree",
         "idrptm.analysis.contacts",

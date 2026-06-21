@@ -3,14 +3,14 @@ requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "idr-ptm-md"
+name = "protein-analysis-md"
 version = "0.1.0"
-description = "Research workflow framework for sequence- and PTM-dependent CALVADOS coarse-grained MD."
+description = "CALVADOS-backed coarse-grained protein/IDR MD workflow framework."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "GPL-3.0-only"
 authors = [
-  { name = "idr-ptm-md contributors" }
+  { name = "protein_analysis_md contributors" }
 ]
 keywords = [
   "CALVADOS",
@@ -22,7 +22,6 @@ keywords = [
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
   "Intended Audience :: Science/Research",
-  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
@@ -38,6 +37,7 @@ dependencies = [
   "pydantic>=2",
   "typer",
   "pyyaml",
+  "requests",
   "mdtraj",
   "pyarrow",
 ]
@@ -49,11 +49,13 @@ dev = [
 ]
 
 [project.scripts]
+pamd = "protein_analysis_md.cli:main"
+protein_analysis_md = "protein_analysis_md.cli:main"
 idrptm = "idrptm.cli:main"
 idr-ptm-md = "idrptm.cli:main"
 
 [project.urls]
-Repository = "https://github.com/idromptm/idr-ptm-md"
+Repository = "https://github.com/idromptm/protein_analysis_md"
 Backend = "https://github.com/KULL-Centre/CALVADOS"
 
 [tool.setuptools.packages.find]
@@ -61,6 +63,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 idrptm = ["py.typed"]
+protein_analysis_md = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

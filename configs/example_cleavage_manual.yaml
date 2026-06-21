@@ -1,0 +1,14 @@
+project: example_cleavage_manual
+protein:
+  source: direct
+  name: ExampleIDR
+  sequence: MSSSSPSTKRGGGRKSSSYSPTSPKKRSGGGG
+  cleavage_sets:
+    - name: manual_sites
+      mode: manual
+      cut_after_sites: [10, 20]
+      output: fragment_mixture
+calvados:
+  model: CALVADOS2
+runner:
+  work_dir: runs/example_cleavage_manual

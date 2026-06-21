@@ -1,0 +1,20 @@
+project: example_cleavage_poisson
+protein:
+  source: direct
+  name: ExampleIDR
+  sequence: MSSSSPSTKRGGGRKSSSYSPTSPKKRSGGGG
+  cleavage_sets:
+    - name: poisson_uniform
+      mode: poisson
+      candidate_sites: all
+      rate_model: uniform
+      global_rate_per_ns: 0.05
+      max_time_ns: 100
+      max_cuts: 5
+      seed: 123
+      min_fragment_length: 5
+      output: state_series
+calvados:
+  model: CALVADOS2
+runner:
+  work_dir: runs/example_cleavage_poisson

@@ -1,6 +1,6 @@
 # Third-Party Licenses
 
-`idr-ptm-md` is licensed as GPL-3.0-only. It is designed as a wrapper workflow
+`protein_analysis_md` is licensed as GPL-3.0-only. It is designed as a wrapper workflow
 around external scientific software and libraries; it does not vendor CALVADOS
 or dependency source code.
 
@@ -10,7 +10,7 @@ or dependency source code.
 | --- | --- | --- | --- |
 | CALVADOS | External simulation backend | GPL-3.0 | <https://github.com/KULL-Centre/CALVADOS> |
 
-Users must install CALVADOS separately. `idr-ptm-md` prepares run directories,
+Users must install CALVADOS separately. `protein_analysis_md` prepares run directories,
 execution scaffolds, and analysis workflows without modifying upstream CALVADOS.
 
 ## Python Dependencies
@@ -24,6 +24,7 @@ execution scaffolds, and analysis workflows without modifying upstream CALVADOS.
 | Pydantic | Configuration schemas | MIT |
 | Typer | Command-line interface | MIT |
 | PyYAML | YAML parsing | MIT |
+| Requests | UniProt/Swiss-Prot HTTP access | Apache-2.0 |
 | MDTraj | Trajectory I/O and analysis helper | LGPL-2.1-or-later |
 | PyArrow | Parquet output support | Apache-2.0 |
 | pytest | Test runner | MIT |
@@ -31,3 +32,6 @@ execution scaffolds, and analysis workflows without modifying upstream CALVADOS.
 
 Dependency license details should be rechecked during release packaging,
 especially if pinned versions change.
+
+UniProt/Swiss-Prot is an optional sequence and annotation source and is not
+vendored in this repository.

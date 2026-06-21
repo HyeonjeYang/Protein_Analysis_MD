@@ -19,6 +19,20 @@ def test_cli_help_works() -> None:
     assert "prepare" in result.output
     assert "analyze" in result.output
     assert "report" in result.output
+    assert "search-uniprot" in result.output
+    assert "estimate-size" in result.output
+
+
+def test_pamd_wrapper_help_works() -> None:
+    pytest.importorskip("typer")
+    from typer.testing import CliRunner
+
+    from protein_analysis_md.cli import app
+
+    result = CliRunner().invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    assert "pamd" in result.output
 
 
 def test_design_cli_generates_outputs(tmp_path) -> None:

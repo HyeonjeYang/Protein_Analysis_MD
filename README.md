@@ -1,6 +1,6 @@
-# idr-ptm-md
+# protein_analysis_md
 
-`idr-ptm-md` is a Python research workflow framework for sequence- and
+`protein_analysis_md` is a Python research workflow framework for sequence- and
 post-translational-modification-dependent coarse-grained molecular dynamics of
 intrinsically disordered regions and proteins.
 
@@ -38,32 +38,36 @@ Stage 1 is a skeleton only. The intended MVP scientific scope is:
 ## Repository Layout
 
 ```text
-src/idrptm/                 Python package
-src/idrptm/analysis/        Analysis API placeholders
-src/idrptm/plotting/        Plot/report API placeholders
+src/protein_analysis_md/    Public Python package namespace
+src/idrptm/                 Backward-compatible historical package
+src/idrptm/analysis/        Analysis API
+src/idrptm/plotting/        Plot/report API
 configs/                    Example workflow YAML files
 tests/                      Import and CLI smoke tests
 ```
 
 ## CLI
 
-The package exposes both `idrptm` and `idr-ptm-md` console scripts:
+The package exposes `pamd` as the primary console script. Legacy `idrptm` and
+`idr-ptm-md` entry points are retained as wrappers.
 
 ```bash
-idrptm --help
-idrptm init --output work/example
-idrptm design configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan
-idrptm design configs/example_multi_protein.yaml --output-dir runs/example_multi_protein
-idrptm design configs/example_cleavage.yaml --output-dir runs/example_cleavage
-idrptm prepare configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan
-idrptm prepare configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan --dry-run
-idrptm run --config configs/example_ptm_scan.yaml --dry-run
-idrptm analyze runs/example_ptm_scan/runs/phosphorylation_scan_fragment__WT
-idrptm compare runs/example_ptm_scan
-idrptm report runs/example_ptm_scan
+pamd --help
+pamd search-uniprot FLK --reviewed --organism "Homo sapiens"
+pamd fetch-sequence FLK --reviewed --organism "Homo sapiens" --interactive
+pamd estimate-size configs/flk_smoke.yaml
+pamd design configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan
+pamd design configs/example_multi_protein.yaml --output-dir runs/example_multi_protein
+pamd design configs/example_cleavage.yaml --output-dir runs/example_cleavage
+pamd prepare configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan
+pamd prepare configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan --dry-run
+pamd run --config configs/example_ptm_scan.yaml --dry-run
+pamd analyze runs/example_ptm_scan/runs/phosphorylation_scan_fragment__WT
+pamd compare runs/example_ptm_scan
+pamd report runs/example_ptm_scan
 ```
 
-`idrptm design` currently writes:
+`pamd design` currently writes:
 
 - `manifest.csv`
 - one simulation-sequence FASTA file per variant under `fasta/`
@@ -89,7 +93,7 @@ Arg-C, high-specificity chymotrypsin, CNBr, and TEV-style cleavage. Design
 outputs include `cleavage_sites.csv`, `fragments.fasta`, and
 `cleavage_manifest.csv` with original residue ranges and preserved PTM mapping.
 
-`idrptm prepare` creates one CALVADOS run directory per manifest row. Each run
+`pamd prepare` creates one CALVADOS run directory per manifest row. Each run
 directory contains `input.fasta`, `residues.csv`, `config.yaml`,
 `components.yaml`, `run.py`, and `metadata.json`.
 
@@ -124,7 +128,7 @@ For cleaved systems, helper analysis APIs cover fragment-resolved Rg/Ree,
 inter-fragment contacts, fragment cluster size, intact-vs-cleaved delta contact
 maps, and contact maps projected back onto original sequence coordinates.
 
-`idrptm analyze` expects a prepared CALVADOS run directory containing `top.pdb`
+`pamd analyze` expects a prepared CALVADOS run directory containing `top.pdb`
 and `trajectory.dcd`, unless explicit paths are supplied with `--topology` and
 `--trajectory`. It writes `timeseries_rg.parquet`, `timeseries_ree.parquet`,
 `contact_map.npy`, `ps.parquet`, `scaling.parquet`, optional `msd.parquet`,
@@ -139,11 +143,11 @@ analysis artifact is accompanied by a `*.units.json` sidecar, and every
 converts Angstrom coordinates to nm before analysis and records both the input
 and canonical coordinate units.
 
-`idrptm compare PROJECT_DIR` detects the WT condition by name and compares each
+`pamd compare PROJECT_DIR` detects the WT condition by name and compares each
 PTM condition against WT. It writes scalar summaries, aggregate P(s), delta P(s),
 condition-average contact maps, and delta contact maps under `comparison/`.
 
-`idrptm report PROJECT_DIR` writes `report/report.md` plus PNG and PDF figures
+`pamd report PROJECT_DIR` writes `report/report.md` plus PNG and PDF figures
 for Rg, Ree, contact maps, delta contact maps, P(s), R(s), PTM site annotation,
 and the scalar summary table.
 
@@ -164,6 +168,6 @@ ruff check .
 3. Stage 3: local and SLURM execution scaffolds with reproducible manifests.
 4. Stage 4: pure trajectory-analysis core for Rg, Ree, contacts, P(s), R(s),
    scaling, lifetime, and MSD.
-5. Stage 5: CALVADOS trajectory loading and `idrptm analyze`.
+5. Stage 5: CALVADOS trajectory loading and `pamd analyze`.
 6. Stage 6: WT-vs-PTM comparison tables, plots, and reports.
 7. Stage 7: parameter validation workflow before expanding beyond pSer/pThr.
