@@ -423,6 +423,7 @@ class WorkflowConfig(StrictModel):
 
     project: str
     replicates: int = Field(1, ge=1)
+    visualization: bool = True
     sequence: SequenceConfig | None = None
     ptm: PTMConfig = Field(default_factory=PTMConfig)
     protein: ProteinConfig | None = None

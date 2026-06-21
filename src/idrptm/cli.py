@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
+import time
 from pathlib import Path
 from typing import Annotated, Literal, cast
+
+os.environ.setdefault("MPLCONFIGDIR", str(Path.cwd() / ".mplconfig"))
 
 import typer
 import yaml
@@ -882,6 +886,93 @@ def resume_command(
         typer.echo(f"{run_dir}: {status} {command or ''}")
 
 
+@app.command("watch")
+def watch_command(
+    project_dir: Annotated[Path, typer.Argument(help="Compiled/prepared project directory.")],
+    follow: Annotated[
+        bool,
+        typer.Option("--follow", "-f", help="Refresh until interrupted."),
+    ] = False,
+    interval_s: Annotated[
+        float,
+        typer.Option("--interval-s", help="Seconds between refreshes with --follow."),
+    ] = 10.0,
+) -> None:
+    """Show simulation, trajectory, and frame-progress status."""
+
+    from idrptm.watch import format_watch, summarize_watch
+
+    try:
+        while True:
+            typer.echo(format_watch(summarize_watch(project_dir)))
+            if not follow:
+                break
+            typer.echo("")
+            time.sleep(interval_s)
+    except KeyboardInterrupt:
+        raise typer.Exit() from None
+    except Exception as exc:
+        typer.echo(f"Watch failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
+@app.command("finalize")
+def finalize_command(
+    project_dir: Annotated[Path, typer.Argument(help="Compiled/prepared project directory.")],
+    analysis_parallel: Annotated[
+        int,
+        typer.Option("--analysis-parallel", help="Concurrent run analyses."),
+    ] = 1,
+    force_analysis: Annotated[
+        bool,
+        typer.Option("--force-analysis", help="Recompute analysis outputs."),
+    ] = False,
+    force_visualization: Annotated[
+        bool,
+        typer.Option("--visualization", help="Generate report/figure/PyMOL outputs."),
+    ] = False,
+    skip_visualization: Annotated[
+        bool,
+        typer.Option("--no-visualization", help="Skip report/figure/PyMOL outputs."),
+    ] = False,
+    pymol: Annotated[
+        bool,
+        typer.Option("--pymol/--no-pymol", help="Create PyMOL export when visualizing."),
+    ] = True,
+) -> None:
+    """Finalize a completed project after simulations."""
+
+    from idrptm.finalize import finalize_project
+
+    if force_visualization and skip_visualization:
+        typer.echo("Use only one of --visualization or --no-visualization.", err=True)
+        raise typer.Exit(1)
+    visualization = None
+    if force_visualization:
+        visualization = True
+    elif skip_visualization:
+        visualization = False
+    try:
+        result = finalize_project(
+            project_dir,
+            analysis_parallel=analysis_parallel,
+            force_analysis=force_analysis,
+            visualization=visualization,
+            pymol=pymol,
+        )
+    except Exception as exc:
+        typer.echo(f"Finalize failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(f"Analyzed runs: {len(result.analyzed_runs)}")
+    typer.echo(f"Skipped existing analyses: {len(result.skipped_analysis)}")
+    typer.echo(f"Comparison: {result.comparison_dir}")
+    typer.echo(f"Visualization: {result.visualization}")
+    if result.report_path:
+        typer.echo(f"Report: {result.report_path}")
+    if result.pymol_dir:
+        typer.echo(f"PyMOL: {result.pymol_dir}")
+
+
 @app.command("clean")
 def clean_command(
     project_dir: Annotated[Path, typer.Argument(help="Compiled/prepared project directory.")],
@@ -896,6 +987,39 @@ def clean_command(
         typer.echo("Dry run: pass --yes to remove cache/temp files.")
         return
     typer.echo(f"Removed {len(removed)} file(s).")
+
+
+@app.command("pack")
+def pack_command(
+    project_dir: Annotated[Path, typer.Argument(help="Compiled/prepared project directory.")],
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Output .tar.gz path."),
+    ] = None,
+    include_trajectories: Annotated[
+        bool,
+        typer.Option(
+            "--include-trajectories",
+            help="Include DCD/PDB/checkpoint-like files in the bundle.",
+        ),
+    ] = False,
+) -> None:
+    """Create a shareable project bundle."""
+
+    from idrptm.bundle import pack_project
+
+    try:
+        result = pack_project(
+            project_dir,
+            output=output,
+            include_trajectories=include_trajectories,
+        )
+    except Exception as exc:
+        typer.echo(f"Pack failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(f"Bundle: {result.archive_path}")
+    typer.echo(f"Included files: {result.included_files}")
+    typer.echo(f"Included trajectories: {result.include_trajectories}")
 
 
 @app.command("list")

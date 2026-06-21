@@ -175,6 +175,32 @@ If `tmux` is unavailable, `--terminal byobu` can be used when byobu is
 installed. Windows users should run detachable long jobs from WSL2 or a Linux
 host rather than native PowerShell.
 
+Watch a running project:
+
+```bash
+pamd watch runs/<PROJECT_DIR>
+pamd watch runs/<PROJECT_DIR> --follow
+```
+
+When simulations are complete, finalize analysis and user-facing outputs:
+
+```bash
+pamd finalize runs/<PROJECT_DIR>
+```
+
+`visualization: false` in the config, or `pamd finalize --no-visualization`,
+skips report figures and PyMOL export while still allowing analysis/comparison
+data products. Visualization is enabled by default.
+
+Create a shareable bundle without heavy trajectories:
+
+```bash
+pamd pack runs/<PROJECT_DIR>
+```
+
+Use `--include-trajectories` only when the archive should include DCD/PDB and
+checkpoint-like files.
+
 ### Trajectory Naming And Provenance
 
 New short configs can let the framework generate descriptive trajectory

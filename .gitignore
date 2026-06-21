@@ -51,6 +51,7 @@ report.md
 *.html
 *.pml
 *.units.json
+*_bundle.tar.gz
 
 # MD trajectory/checkpoint formats
 *.dcd

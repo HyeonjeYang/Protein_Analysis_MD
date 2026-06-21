@@ -7,7 +7,11 @@ namespace while the project migrates to ``protein_analysis_md``.
 from __future__ import annotations
 
 import importlib
+import os
 import sys
+from pathlib import Path
+
+os.environ.setdefault("MPLCONFIGDIR", str(Path.cwd() / ".mplconfig"))
 
 from idrptm import SUPPORTED_MVP_PTMS, __version__
 
@@ -32,6 +36,7 @@ _ALIASES = [
     "analysis.scaling",
     "analysis.sequence_features",
     "analysis.smoothing",
+    "bundle",
     "calvados_adapter",
     "cleavage",
     "configuration",
@@ -39,9 +44,12 @@ _ALIASES = [
     "enzymes",
     "environment",
     "environment_check",
+    "finalize",
     "hpc",
+    "local_pipeline",
     "presets",
     "project",
+    "provenance",
     "ptm",
     "recipe",
     "registry",
@@ -65,10 +73,12 @@ _ALIASES = [
     "visualization.free_energy",
     "visualization.heatmaps",
     "visualization.phase",
+    "visualization.pymol",
     "visualization.ptm",
     "visualization.sequence_tracks",
     "visualization.single_chain",
     "visualization.smoothing_policy",
+    "watch",
 ]
 
 for _name in _ALIASES:

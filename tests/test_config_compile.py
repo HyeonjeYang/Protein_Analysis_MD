@@ -176,6 +176,36 @@ def test_short_config_can_auto_name_trajectory_folder(tmp_path) -> None:
     assert workflow.runner.include_timestamp is False
 
 
+def test_short_config_accepts_visualization_flag(tmp_path) -> None:
+    config = tmp_path / "no_viz.yaml"
+    outdir = tmp_path / "runs" / "no_viz"
+    config.write_text(
+        dedent(
+            f"""
+            project:
+              name: no_viz
+              outdir: {outdir}
+            visualization: false
+            input:
+              protein:
+                source: direct
+                name: seq
+                sequence: "AST"
+            protocol:
+              preset: smoke_single_chain
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    locked = compile_config_file(config)
+    workflow = load_config(locked.project_dir)
+
+    assert workflow.visualization is False
+    assert locked.resolved["visualization"] is False
+
+
 def test_locked_yaml_is_plain_workflow_yaml(tmp_path) -> None:
     config = tmp_path / "plain.yaml"
     outdir = tmp_path / "runs" / "plain"

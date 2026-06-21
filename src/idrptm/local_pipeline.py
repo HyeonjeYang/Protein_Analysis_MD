@@ -317,18 +317,12 @@ def run_pipeline_worker(
         return 1
 
     final_results = _run_pool(
-        [
-            (
-                "compare",
-                [*_cli_command(python_executable), "compare", str(root)],
-                logs / "compare.log",
-            ),
-            (
-                "report",
-                [*_cli_command(python_executable), "report", str(root)],
-                logs / "report.log",
-            ),
-        ],
+        _final_commands(
+            root=root,
+            logs=logs,
+            python_executable=python_executable,
+            visualization=_visualization_enabled(root),
+        ),
         max_parallel=1,
         status_path=status_path,
         stage="report",
@@ -507,6 +501,54 @@ def _worker_command(
         "--python",
         python_executable,
     ]
+
+
+def _final_commands(
+    *,
+    root: Path,
+    logs: Path,
+    python_executable: str,
+    visualization: bool,
+) -> list[tuple[str, list[str], Path]]:
+    commands = [
+        (
+            "compare",
+            [*_cli_command(python_executable), "compare", str(root)],
+            logs / "compare.log",
+        )
+    ]
+    if visualization:
+        commands.extend(
+            [
+                (
+                    "report",
+                    [*_cli_command(python_executable), "report", str(root)],
+                    logs / "report.log",
+                ),
+                (
+                    "pymol",
+                    [
+                        *_cli_command(python_executable),
+                        "pymol",
+                        str(root),
+                        "--force",
+                    ],
+                    logs / "pymol.log",
+                ),
+            ]
+        )
+    return commands
+
+
+def _visualization_enabled(root: Path) -> bool:
+    lock = root / "project.lock.yaml"
+    if not lock.exists():
+        return True
+    try:
+        payload = yaml.safe_load(lock.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return True
+    return bool(payload.get("visualization", True))
 
 
 def _cli_command(python_executable: str) -> list[str]:

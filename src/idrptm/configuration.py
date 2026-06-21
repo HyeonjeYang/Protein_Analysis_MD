@@ -38,6 +38,7 @@ class NormalizedConfig:
     report: dict[str, Any]
     execution: dict[str, Any]
     trajectory: dict[str, Any]
+    visualization: bool
     sweep: dict[str, Any]
     legacy_workflow: dict[str, Any] | None = None
 
@@ -116,6 +117,7 @@ def normalize_config(
             report={"preset": "standard"},
             execution=dict(user_config.get("execution") or {}),
             trajectory=trajectory,
+            visualization=bool(user_config.get("visualization", True)),
             sweep=user_config.get("sweep", {}),
             legacy_workflow=dict(user_config),
         )
@@ -159,6 +161,7 @@ def normalize_config(
         report=dict(user_config.get("report") or {"preset": "standard"}),
         execution=dict(user_config.get("execution") or {}),
         trajectory=trajectory,
+        visualization=_visualization_enabled(user_config),
         sweep=dict(user_config.get("sweep") or {}),
     )
 
@@ -284,6 +287,7 @@ def compile_config(resolved_config: ResolvedConfig) -> LockedConfig:
         "report": resolved_config.report,
         "execution": resolved_config.execution,
         "trajectory": resolved_config.normalized.trajectory,
+        "visualization": resolved_config.normalized.visualization,
         "sweep": resolved_config.normalized.sweep,
         "warnings": warnings,
     }
@@ -303,6 +307,7 @@ def compile_config(resolved_config: ResolvedConfig) -> LockedConfig:
         "report": resolved_config.report,
         "execution": resolved_config.execution,
         "trajectory": resolved_config.normalized.trajectory,
+        "visualization": resolved_config.normalized.visualization,
         "sweep": resolved_config.normalized.sweep,
         "units": CANONICAL_UNITS,
         "storage_estimate": storage_payload,
@@ -475,6 +480,15 @@ def _trajectory_options(
     }
 
 
+def _visualization_enabled(user_config: dict[str, Any]) -> bool:
+    if "visualization" in user_config:
+        return bool(user_config["visualization"])
+    report = user_config.get("report")
+    if isinstance(report, dict) and "visualization" in report:
+        return bool(report["visualization"])
+    return True
+
+
 def _protein_hint(input_block: dict[str, Any]) -> str | None:
     protein = dict(input_block.get("protein") or {})
     if protein:
@@ -542,6 +556,7 @@ def _workflow_from_normalized(
     workflow = {
         "project": normalized.project_name,
         "replicates": int(simulation.get("replicates", 1)),
+        "visualization": normalized.visualization,
         "protein": protein,
         "calvados": {
             "model": simulation.get("model", "CALVADOS2"),

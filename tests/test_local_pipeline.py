@@ -6,6 +6,7 @@ import yaml
 
 from idrptm.local_pipeline import (
     HardwareInfo,
+    _final_commands,
     apply_backend_to_project,
     recommend_local_execution,
 )
@@ -82,3 +83,23 @@ def test_apply_backend_updates_prepared_run_configs(tmp_path) -> None:
     assert updated == (run_dir / "config.yaml",)
     assert payload["platform"] == "CPU"
     assert payload["threads"] == 1
+
+
+def test_final_commands_respect_visualization_flag(tmp_path) -> None:
+    logs = tmp_path / "logs"
+
+    without_visuals = _final_commands(
+        root=tmp_path,
+        logs=logs,
+        python_executable="python",
+        visualization=False,
+    )
+    with_visuals = _final_commands(
+        root=tmp_path,
+        logs=logs,
+        python_executable="python",
+        visualization=True,
+    )
+
+    assert [item[0] for item in without_visuals] == ["compare"]
+    assert [item[0] for item in with_visuals] == ["compare", "report", "pymol"]

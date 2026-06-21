@@ -28,6 +28,9 @@ def test_cli_help_works() -> None:
     assert "repo-check" in result.output
     assert "launch-local" in result.output
     assert "pymol" in result.output
+    assert "watch" in result.output
+    assert "finalize" in result.output
+    assert "pack" in result.output
 
 
 def test_pamd_wrapper_help_works() -> None:
