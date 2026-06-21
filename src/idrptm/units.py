@@ -96,6 +96,32 @@ ANALYSIS_OUTPUT_UNITS: dict[str, dict[str, str]] = {
         "raw_probability": "dimensionless",
         "n_origins": "count",
     },
+    "fragment_rg": {
+        "frame": "index",
+        "fragment_id": "identifier",
+        "rg": CANONICAL_UNITS["rg"],
+    },
+    "fragment_ree": {
+        "frame": "index",
+        "fragment_id": "identifier",
+        "ree": CANONICAL_UNITS["ree"],
+    },
+    "inter_fragment_contact_map": {
+        "contact_probability": CANONICAL_UNITS["contact_probability"],
+    },
+    "fragment_cluster_size": {
+        "frame": "index",
+        "n_clusters": "count",
+        "largest_cluster_size": "fragments",
+        "mean_cluster_size": "fragments",
+    },
+    "delta_contact_map": {
+        "contact_probability_delta": "dimensionless",
+    },
+    "original_sequence_contact_map": {
+        "contact_probability": CANONICAL_UNITS["contact_probability"],
+        "residue_index": "original sequence residue",
+    },
 }
 
 

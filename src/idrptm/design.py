@@ -10,12 +10,22 @@ from pathlib import Path
 
 import yaml
 
+from idrptm.cleavage import CleavageSite, generate_cleavage_states
 from idrptm.ptm import AppliedPTM, PTMRequest, PTMState, apply_ptms
-from idrptm.schema import ProteinConfig, PTMConfig, PTMSite, WorkflowConfig, load_config
+from idrptm.schema import (
+    CleavageSet,
+    ProteinConfig,
+    PTMConfig,
+    PTMSite,
+    WorkflowConfig,
+    load_config,
+)
 from idrptm.sequence import (
+    FASTA_WRAP,
     SequenceRecord,
     format_fasta,
     load_single_sequence,
+    normalize_raw_sequence,
     sanitize_identifier,
 )
 
@@ -33,6 +43,16 @@ class DesignedComponent:
     ptm_state: PTMState
     copies: int = 1
     molecule_type: str = "protein"
+    cleavage_set_name: str | None = None
+    cleavage_state_name: str | None = None
+    fragment_id: str | None = None
+    parent_component_name: str | None = None
+    original_start: int = 1
+    original_end: int = 1
+    original_indices: tuple[int, ...] = ()
+    cleavage_cuts: tuple[int, ...] = ()
+    cleavage_sites: tuple[CleavageSite, ...] = ()
+    cut_number: int = 0
 
     @property
     def is_wild_type(self) -> bool:
@@ -77,6 +97,9 @@ class DesignOutput:
     fasta_paths: tuple[Path, ...]
     metadata_paths: tuple[Path, ...]
     variants: tuple[DesignedVariant, ...]
+    cleavage_sites_path: Path | None = None
+    fragments_fasta_path: Path | None = None
+    cleavage_manifest_path: Path | None = None
 
 
 def _request_from_site(site: PTMSite) -> PTMRequest:
@@ -168,6 +191,7 @@ def design_variants(config: WorkflowConfig) -> tuple[DesignedVariant, ...]:
     if config.system_sets:
         return tuple(_design_system_sets(config, catalog))
 
+    proteins_by_name = {sanitize_identifier(protein.name): protein for protein in config.proteins}
     variants: list[DesignedVariant] = []
     for protein_name in sorted(catalog):
         unique_components = {
@@ -175,15 +199,42 @@ def design_variants(config: WorkflowConfig) -> tuple[DesignedVariant, ...]:
             for component in catalog[protein_name].values()
         }
         for component in sorted(unique_components.values(), key=_component_sort_key):
-            variants.append(
-                _system_from_components(
-                    variant_id=component.protein_variant_id,
-                    system_name=component.protein_variant_id,
-                    components=(component,),
-                    placement=config.calvados.topol,
+            variants.extend(
+                _single_component_systems(
+                    config=config,
+                    protein=proteins_by_name[protein_name],
+                    component=component,
                 )
             )
     return tuple(sorted(variants, key=_variant_sort_key))
+
+
+def _single_component_systems(
+    *,
+    config: WorkflowConfig,
+    protein: ProteinConfig,
+    component: DesignedComponent,
+) -> list[DesignedVariant]:
+    variants: list[DesignedVariant] = []
+    include_intact = any(cleavage.include_intact for cleavage in protein.cleavage_sets)
+    if not protein.cleavage_sets or include_intact:
+        variants.append(
+            _system_from_components(
+                variant_id=component.protein_variant_id,
+                system_name=component.protein_variant_id,
+                components=(component,),
+                placement=config.calvados.topol,
+            )
+        )
+    for cleavage_set in protein.cleavage_sets:
+        variants.extend(
+            _cleavage_systems_for_component(
+                config=config,
+                cleavage_set=cleavage_set,
+                component=component,
+            )
+        )
+    return variants
 
 
 def _protein_variant_catalog(
@@ -223,6 +274,9 @@ def _design_protein_components(
                 ptm_state=wt_state,
                 copies=1,
                 molecule_type=protein.molecule_type,
+                original_start=1,
+                original_end=sequence.length,
+                original_indices=tuple(range(1, sequence.length + 1)),
             )
         )
 
@@ -244,6 +298,9 @@ def _design_protein_components(
                 ptm_state=PTMState(name=_site_label(applied_sites), sites=applied_sites),
                 copies=1,
                 molecule_type=protein.molecule_type,
+                original_start=1,
+                original_end=sequence.length,
+                original_indices=tuple(range(1, sequence.length + 1)),
             )
         )
 
@@ -291,6 +348,16 @@ def _design_system_sets(
                     copies=component_config.copies,
                     molecule_type=component_config.molecule_type
                     or base_component.molecule_type,
+                    cleavage_set_name=base_component.cleavage_set_name,
+                    cleavage_state_name=base_component.cleavage_state_name,
+                    fragment_id=base_component.fragment_id,
+                    parent_component_name=base_component.parent_component_name,
+                    original_start=base_component.original_start,
+                    original_end=base_component.original_end,
+                    original_indices=base_component.original_indices,
+                    cleavage_cuts=base_component.cleavage_cuts,
+                    cleavage_sites=base_component.cleavage_sites,
+                    cut_number=base_component.cut_number,
                 )
             )
         variant_id = _system_variant_id(system_set.name, tuple(components))
@@ -303,6 +370,101 @@ def _design_system_sets(
             )
         )
     return sorted(variants, key=_variant_sort_key)
+
+
+def _cleavage_systems_for_component(
+    *,
+    config: WorkflowConfig,
+    cleavage_set: CleavageSet,
+    component: DesignedComponent,
+) -> list[DesignedVariant]:
+    states = generate_cleavage_states(
+        component.simulation_sequence,
+        cleavage_set,
+        ptm_sites=component.ptm_state.sites,
+    )
+    variants: list[DesignedVariant] = []
+    for state in states:
+        fragments = _fragment_components_for_state(component, cleavage_set, state)
+        if cleavage_set.individual_fragments:
+            for fragment in fragments:
+                variants.append(
+                    _system_from_components(
+                        variant_id=fragment.component_name,
+                        system_name=fragment.component_name,
+                        components=(fragment,),
+                        placement=config.calvados.topol,
+                    )
+                )
+        if cleavage_set.fragment_mixture and fragments:
+            mixture_id = sanitize_identifier(
+                f"{component.protein_variant_id}__{state.name}__mixture"
+            )
+            variants.append(
+                _system_from_components(
+                    variant_id=mixture_id,
+                    system_name=mixture_id,
+                    components=fragments,
+                    placement=_fragment_mixture_placement(config),
+                )
+            )
+    return variants
+
+
+def _fragment_components_for_state(
+    component: DesignedComponent,
+    cleavage_set: CleavageSet,
+    state: object,
+) -> tuple[DesignedComponent, ...]:
+    products = state.products
+    fragments: list[DesignedComponent] = []
+    for product in products:
+        original_sequence = component.original_sequence[
+            product.original_start - 1 : product.original_end
+        ]
+        sites = tuple(
+            site
+            for site in component.ptm_state.sites
+            if site.biological_position in set(product.original_indices)
+        )
+        component_name = sanitize_identifier(
+            f"{component.protein_variant_id}__{cleavage_set.name}__{product.fragment_id}"
+        )
+        fragments.append(
+            DesignedComponent(
+                component_name=component_name,
+                protein_name=component.protein_name,
+                protein_variant_id=component.protein_variant_id,
+                base_sequence=SequenceRecord(
+                    name=component_name,
+                    sequence=original_sequence,
+                    description=f"fragment of {component.protein_variant_id}",
+                ),
+                original_sequence=original_sequence,
+                simulation_sequence=product.sequence,
+                ptm_state=PTMState(
+                    name=component.ptm_state.name,
+                    sites=sites,
+                ),
+                copies=1,
+                molecule_type=component.molecule_type,
+                cleavage_set_name=cleavage_set.name,
+                cleavage_state_name=state.name,
+                fragment_id=product.fragment_id,
+                parent_component_name=component.component_name,
+                original_start=product.original_start,
+                original_end=product.original_end,
+                original_indices=tuple(product.original_indices),
+                cleavage_cuts=tuple(state.cuts),
+                cleavage_sites=tuple(state.sites),
+                cut_number=state.cut_number,
+            )
+        )
+    return tuple(fragments)
+
+
+def _fragment_mixture_placement(config: WorkflowConfig) -> str:
+    return "grid" if config.calvados.topol == "center" else config.calvados.topol
 
 
 def _system_from_components(
@@ -417,6 +579,15 @@ def _component_metadata(component: DesignedComponent) -> dict[str, object]:
         "simulation_sequence": component.simulation_sequence,
         "ptm_sites_1based": _component_site_summary_1based(component),
         "ptm_sites_0based": _component_site_summary_0based(component),
+        "cleavage_set": component.cleavage_set_name,
+        "cleavage_state": component.cleavage_state_name,
+        "fragment_id": component.fragment_id,
+        "parent_component_name": component.parent_component_name,
+        "original_start": component.original_start,
+        "original_end": component.original_end,
+        "original_indices": list(component.original_indices),
+        "cleavage_cuts": list(component.cleavage_cuts),
+        "cut_number": component.cut_number,
     }
 
 
@@ -506,12 +677,26 @@ def write_design_outputs(
         writer.writeheader()
         writer.writerows(rows)
 
+    cleavage_sites_path = None
+    fragments_fasta_path = None
+    cleavage_manifest_path = None
+    if _has_cleavage_outputs(variants):
+        cleavage_sites_path = root / "cleavage_sites.csv"
+        fragments_fasta_path = root / "fragments.fasta"
+        cleavage_manifest_path = root / "cleavage_manifest.csv"
+        _write_cleavage_sites_csv(variants, cleavage_sites_path)
+        _write_fragments_fasta(variants, fragments_fasta_path)
+        _write_cleavage_manifest_csv(config.project, variants, cleavage_manifest_path)
+
     return DesignOutput(
         output_dir=root,
         manifest_path=manifest_path,
         fasta_paths=tuple(fasta_paths),
         metadata_paths=tuple(metadata_paths),
         variants=variants,
+        cleavage_sites_path=cleavage_sites_path,
+        fragments_fasta_path=fragments_fasta_path,
+        cleavage_manifest_path=cleavage_manifest_path,
     )
 
 
@@ -550,3 +735,148 @@ def _component_site_summary_0based(component: DesignedComponent) -> str:
         f"{site.ptm}:{site.zero_based_index}:{site.source_residue}->{site.simulation_code}"
         for site in component.ptm_state.sites
     )
+
+
+def _has_cleavage_outputs(variants: tuple[DesignedVariant, ...]) -> bool:
+    return any(
+        component.cleavage_set_name is not None
+        for variant in variants
+        for component in variant.components
+    )
+
+
+def _write_cleavage_sites_csv(variants: tuple[DesignedVariant, ...], path: Path) -> Path:
+    rows: list[dict[str, object]] = []
+    seen: set[tuple[str | None, str | None, int]] = set()
+    for component in _cleavage_components(variants):
+        for site in component.cleavage_sites:
+            key = (component.parent_component_name, component.cleavage_state_name, site.cut_after)
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(
+                {
+                    "parent_component_name": component.parent_component_name,
+                    "protein_variant_id": component.protein_variant_id,
+                    "cleavage_set": component.cleavage_set_name,
+                    "cleavage_state": component.cleavage_state_name,
+                    "cut_number": component.cut_number,
+                    "cut_after": site.cut_after,
+                    "n_terminal_residue": site.n_terminal_residue,
+                    "c_terminal_residue": site.c_terminal_residue,
+                    "rule": site.rule,
+                }
+            )
+    fieldnames = [
+        "parent_component_name",
+        "protein_variant_id",
+        "cleavage_set",
+        "cleavage_state",
+        "cut_number",
+        "cut_after",
+        "n_terminal_residue",
+        "c_terminal_residue",
+        "rule",
+    ]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+    return path
+
+
+def _write_fragments_fasta(variants: tuple[DesignedVariant, ...], path: Path) -> Path:
+    records: list[str] = []
+    seen: set[str] = set()
+    for component in _cleavage_components(variants):
+        if component.component_name in seen:
+            continue
+        seen.add(component.component_name)
+        records.append(
+            _format_component_fasta(
+                component.component_name,
+                component.simulation_sequence,
+                f"original_range={component.original_start}-{component.original_end}",
+            ).rstrip()
+        )
+    path.write_text("\n".join(records) + "\n", encoding="utf-8")
+    return path
+
+
+def _write_cleavage_manifest_csv(
+    project: str,
+    variants: tuple[DesignedVariant, ...],
+    path: Path,
+) -> Path:
+    rows: list[dict[str, object]] = []
+    for variant in variants:
+        for component in variant.components:
+            if component.cleavage_set_name is None:
+                continue
+            rows.append(
+                {
+                    "project": project,
+                    "variant_id": variant.variant_id,
+                    "component_name": component.component_name,
+                    "parent_component_name": component.parent_component_name,
+                    "protein_variant_id": component.protein_variant_id,
+                    "cleavage_set": component.cleavage_set_name,
+                    "cleavage_state": component.cleavage_state_name,
+                    "fragment_id": component.fragment_id,
+                    "cut_number": component.cut_number,
+                    "original_start": component.original_start,
+                    "original_end": component.original_end,
+                    "original_indices": ";".join(
+                        str(index) for index in component.original_indices
+                    ),
+                    "ptm_sites_1based": ";".join(
+                        str(site.biological_position) for site in component.ptm_state.sites
+                    ),
+                    "simulation_sequence": component.simulation_sequence,
+                    "molecule_type": component.molecule_type,
+                }
+            )
+    fieldnames = [
+        "project",
+        "variant_id",
+        "component_name",
+        "parent_component_name",
+        "protein_variant_id",
+        "cleavage_set",
+        "cleavage_state",
+        "fragment_id",
+        "cut_number",
+        "original_start",
+        "original_end",
+        "original_indices",
+        "ptm_sites_1based",
+        "simulation_sequence",
+        "molecule_type",
+    ]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+    return path
+
+
+def _cleavage_components(variants: tuple[DesignedVariant, ...]) -> list[DesignedComponent]:
+    return [
+        component
+        for variant in variants
+        for component in variant.components
+        if component.cleavage_set_name is not None
+    ]
+
+
+def _format_component_fasta(name: str, sequence: str, description: str) -> str:
+    normalized = normalize_raw_sequence(sequence)
+    header = sanitize_identifier(name)
+    if description:
+        header = f"{header} {description}"
+    lines = [f">{header}"]
+    lines.extend(
+        normalized[index : index + FASTA_WRAP]
+        for index in range(0, len(normalized), FASTA_WRAP)
+    )
+    return "\n".join(lines) + "\n"

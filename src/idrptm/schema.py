@@ -14,6 +14,8 @@ ExecutionBackend = Literal["local", "slurm"]
 Integrator = Literal["calvados_default"]
 SimulationPlatform = Literal["CPU", "CUDA"]
 PlacementMode = Literal["center", "grid", "random", "slab"]
+CleavageMode = Literal["protease", "random", "sequential", "manual"]
+CleavageOrder = Literal["n_to_c", "c_to_n", "random"]
 
 
 class StrictModel(BaseModel):
@@ -83,10 +85,68 @@ class PTMConfig(StrictModel):
         return self
 
 
+class ProteaseRule(StrictModel):
+    """Named protease cleavage rule."""
+
+    name: str
+
+
+class CleavageProduct(StrictModel):
+    """Cleavage product metadata in original sequence coordinates."""
+
+    fragment_id: str
+    sequence: str
+    original_start: int = Field(..., ge=1)
+    original_end: int = Field(..., ge=1)
+    original_indices: list[int] = Field(default_factory=list)
+    ptm_sites_1based: list[int] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_range(self) -> CleavageProduct:
+        """Require an inclusive original-coordinate range."""
+
+        if self.original_end < self.original_start:
+            raise ValueError("CleavageProduct original_end must be >= original_start.")
+        return self
+
+
+class CleavageSet(StrictModel):
+    """Pre-simulation cleavage/proteolysis perturbation settings."""
+
+    name: str
+    mode: CleavageMode
+    protease: str | ProteaseRule | None = None
+    manual_cuts: list[int] = Field(default_factory=list)
+    missed_cleavages: int = Field(0, ge=0)
+    cleavage_probability: float = Field(1.0, ge=0, le=1)
+    n_cuts: int | None = Field(None, ge=0)
+    seed: int | None = None
+    min_fragment_length: int = Field(1, ge=1)
+    order: CleavageOrder = "n_to_c"
+    preserve_ptm_mapping: bool = True
+    include_intact: bool = True
+    individual_fragments: bool = True
+    fragment_mixture: bool = True
+    sequential_series: bool = False
+
+    @model_validator(mode="after")
+    def validate_mode_options(self) -> CleavageSet:
+        """Validate mode-specific cleavage inputs."""
+
+        if self.mode == "protease" and self.protease is None:
+            raise ValueError("Cleavage mode 'protease' requires a protease rule.")
+        if self.mode == "manual" and not self.manual_cuts:
+            raise ValueError("Cleavage mode 'manual' requires manual_cuts.")
+        if self.mode == "sequential":
+            self.sequential_series = True
+        return self
+
+
 class ProteinConfig(SequenceConfig):
     """Protein/IDR definition with its own PTM design space."""
 
     ptm: PTMConfig = Field(default_factory=PTMConfig)
+    cleavage_sets: list[CleavageSet] = Field(default_factory=list)
     molecule_type: str = "protein"
 
 

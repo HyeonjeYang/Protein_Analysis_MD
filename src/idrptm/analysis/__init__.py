@@ -2,6 +2,14 @@
 
 from __future__ import annotations
 
+from idrptm.analysis.cleavage import (
+    fragment_cluster_size,
+    fragment_resolved_ree,
+    fragment_resolved_rg,
+    intact_vs_cleaved_delta_contact_map,
+    inter_fragment_contact_map,
+    original_sequence_coordinate_contact_map,
+)
 from idrptm.analysis.contacts import contact_map_from_positions
 from idrptm.analysis.io import TrajectoryData, load_calvados_trajectory
 from idrptm.analysis.lifetime import contact_lifetime
@@ -39,11 +47,17 @@ __all__ = [
     "contact_lifetime",
     "contact_map_from_positions",
     "fit_flory_exponent",
+    "fragment_cluster_size",
+    "fragment_resolved_ree",
+    "fragment_resolved_rg",
+    "intact_vs_cleaved_delta_contact_map",
     "inter_chain_contact_map",
+    "inter_fragment_contact_map",
     "inter_protein_contact_lifetime",
     "internal_distance_scaling",
     "intra_chain_contact_map",
     "load_calvados_trajectory",
+    "original_sequence_coordinate_contact_map",
     "p_of_s",
     "per_chain_ree",
     "per_chain_rg",

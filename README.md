@@ -54,6 +54,7 @@ idrptm --help
 idrptm init --output work/example
 idrptm design configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan
 idrptm design configs/example_multi_protein.yaml --output-dir runs/example_multi_protein
+idrptm design configs/example_cleavage.yaml --output-dir runs/example_cleavage
 idrptm prepare configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan
 idrptm prepare configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan --dry-run
 idrptm run --config configs/example_ptm_scan.yaml --dry-run
@@ -79,6 +80,14 @@ using `sequence:` plus top-level `ptm:` remain supported, and a single
 of protein PTM states, copy numbers, molecule types, and placement modes. This
 supports single-protein runs, multi-protein runs, and mixed WT/PTM systems such
 as WT and phosphorylated copies of the same protein in one CALVADOS system.
+
+Proteolysis support is implemented as pre-simulation sequence-state design, not
+dynamic bond breaking during MD. `cleavage_sets:` on a protein can generate an
+intact state, individual fragment simulations, fragment-mixture simulations, and
+sequential cleavage series. Built-in MVP rules include simple trypsin, Lys-C,
+Arg-C, high-specificity chymotrypsin, CNBr, and TEV-style cleavage. Design
+outputs include `cleavage_sites.csv`, `fragments.fasta`, and
+`cleavage_manifest.csv` with original residue ranges and preserved PTM mapping.
 
 `idrptm prepare` creates one CALVADOS run directory per manifest row. Each run
 directory contains `input.fasta`, `residues.csv`, `config.yaml`,
@@ -110,6 +119,10 @@ When per-residue chain metadata are available, analysis also supports
 chain-resolved Rg/Ree, intra-chain and inter-chain contact maps, chain COM
 distances, per-chain COM MSD, cluster-size time series, and inter-protein
 contact lifetime.
+
+For cleaved systems, helper analysis APIs cover fragment-resolved Rg/Ree,
+inter-fragment contacts, fragment cluster size, intact-vs-cleaved delta contact
+maps, and contact maps projected back onto original sequence coordinates.
 
 `idrptm analyze` expects a prepared CALVADOS run directory containing `top.pdb`
 and `trajectory.dcd`, unless explicit paths are supplied with `--topology` and

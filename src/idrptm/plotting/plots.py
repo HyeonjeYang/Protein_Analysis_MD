@@ -171,6 +171,87 @@ def plot_chain_resolved_rg(table: pd.DataFrame) -> plt.Figure:
     return plot_distribution(plot_table, "rg", "Rg (nm)", "Chain-resolved Rg")
 
 
+def plot_cleavage_map(
+    sequence_length: int,
+    cleavage_sites: pd.DataFrame,
+    title: str = "Cleavage map",
+) -> plt.Figure:
+    """Plot cleavage sites along the original sequence."""
+
+    fig, ax = plt.subplots(figsize=(8, 1.8))
+    ax.hlines(0, 1, sequence_length, color="0.75", linewidth=6)
+    if not cleavage_sites.empty:
+        ax.vlines(
+            cleavage_sites["cut_after"],
+            -0.35,
+            0.35,
+            color="tab:red",
+            linewidth=2,
+        )
+    ax.set_xlim(1, max(sequence_length, 1))
+    ax.set_ylim(-0.8, 0.8)
+    ax.set_yticks([])
+    ax.set_xlabel("Original residue position (residue)")
+    ax.set_title(title)
+    return fig
+
+
+def plot_fragment_architecture(
+    fragments: pd.DataFrame,
+    title: str = "Fragment architecture",
+) -> plt.Figure:
+    """Plot fragment original-coordinate ranges."""
+
+    fig, ax = plt.subplots(figsize=(8, max(2.0, 0.35 * len(fragments) + 1.0)))
+    for row_index, row in fragments.reset_index(drop=True).iterrows():
+        ax.hlines(
+            row_index,
+            int(row["original_start"]),
+            int(row["original_end"]),
+            linewidth=5,
+            color="tab:blue",
+        )
+    ax.set_yticks(range(len(fragments)), fragments["fragment_id"].astype(str).tolist())
+    ax.set_xlabel("Original residue position (residue)")
+    ax.set_title(title)
+    return fig
+
+
+def plot_intact_vs_cleaved_contact_map(
+    intact: np.ndarray,
+    cleaved: np.ndarray,
+    title: str = "Intact vs cleaved contact maps",
+) -> plt.Figure:
+    """Plot intact and cleaved contact maps side by side."""
+
+    fig, axes = plt.subplots(1, 2, figsize=(9, 4))
+    vmax = max(float(np.nanmax(intact)), float(np.nanmax(cleaved)), 1.0)
+    for ax, matrix, label in zip(axes, [intact, cleaved], ["Intact", "Cleaved"], strict=True):
+        image = ax.imshow(matrix, origin="lower", cmap="viridis", vmin=0, vmax=vmax)
+        ax.set_xlabel("Residue index (residue)")
+        ax.set_ylabel("Residue index (residue)")
+        ax.set_title(label)
+    fig.colorbar(image, ax=axes.ravel().tolist(), label="Contact probability (dimensionless)")
+    fig.suptitle(title)
+    return fig
+
+
+def plot_cut_number_summary(
+    table: pd.DataFrame,
+    y: str,
+    ylabel: str,
+    title: str,
+) -> plt.Figure:
+    """Plot a summary observable against cleavage cut number."""
+
+    fig, ax = plt.subplots(figsize=(5.5, 4))
+    ax.plot(table["cut_number"], table[y], marker="o")
+    ax.set_xlabel("Cut number (count)")
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    return fig
+
+
 def plot_summary_table(summary: pd.DataFrame) -> plt.Figure:
     """Render the scalar comparison summary as a compact table."""
 
