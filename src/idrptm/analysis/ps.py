@@ -28,10 +28,11 @@ def p_of_s(contact_map: ArrayLike) -> pd.DataFrame:
             {
                 "s": separation,
                 "p": float(values.mean()) if values.size else float("nan"),
+                "p_contact": float(values.mean()) if values.size else float("nan"),
                 "n_pairs": int(values.size),
             }
         )
-    return pd.DataFrame(rows, columns=["s", "p", "n_pairs"])
+    return pd.DataFrame(rows, columns=["s", "p", "p_contact", "n_pairs"])
 
 
 def compute_ps(contact_map: ArrayLike) -> pd.DataFrame:

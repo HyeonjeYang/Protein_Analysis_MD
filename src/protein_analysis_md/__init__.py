@@ -29,6 +29,7 @@ _ALIASES = [
     "analysis.rg",
     "analysis.scaling",
     "analysis.sequence_features",
+    "analysis.smoothing",
     "calvados_adapter",
     "cleavage",
     "configuration",

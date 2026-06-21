@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -56,6 +57,7 @@ def generate_report(project_dir: str | Path, output_dir: str | Path | None = Non
     comparison = compare_project(project_path, output_dir=project_path / "comparison")
     runs = load_project_replicates(project_path)
     manifest = pd.DataFrame(_read_manifest(project_path / "manifest.csv"))
+    smoothing = _report_smoothing(project_path)
     figure_paths: list[Path] = []
 
     rg_distribution = _distribution_table(runs, "rg", "rg")
@@ -103,6 +105,19 @@ def generate_report(project_dir: str | Path, output_dir: str | Path | None = Non
 
     ps_aggregate = pd.read_parquet(comparison.outputs["ps_aggregate_parquet"])
     scaling_aggregate = _scaling_aggregate(runs)
+    show_raw_points = bool(smoothing.get("show_raw_points", True))
+    show_smoothed_line = bool(smoothing.get("show_smoothed_line", True))
+    ps_smooth = (
+        "p_smooth_mean"
+        if smoothing.get("use_smoothed_ps", True) and "p_smooth_mean" in ps_aggregate
+        else None
+    )
+    rs_smooth = (
+        "distance_smooth_mean"
+        if smoothing.get("use_smoothed_rs", True)
+        and "distance_smooth_mean" in scaling_aggregate
+        else None
+    )
     figure_paths.extend(
         save_figure(
             plot_lines(
@@ -111,6 +126,9 @@ def generate_report(project_dir: str | Path, output_dir: str | Path | None = Non
                 "p_mean",
                 "P(s) (dimensionless)",
                 "Contact probability P(s)",
+                smooth_y=ps_smooth,
+                show_raw_points=show_raw_points,
+                show_smoothed_line=show_smoothed_line,
             ),
             figures / "ps",
         )
@@ -123,6 +141,9 @@ def generate_report(project_dir: str | Path, output_dir: str | Path | None = Non
                 "distance_mean",
                 "R(s) (nm)",
                 "Internal distance R(s)",
+                smooth_y=rs_smooth,
+                show_raw_points=show_raw_points,
+                show_smoothed_line=show_smoothed_line,
             ),
             figures / "rs",
         )
@@ -136,7 +157,7 @@ def generate_report(project_dir: str | Path, output_dir: str | Path | None = Non
 
     report_path = root / "report.md"
     report_path.write_text(
-        _report_markdown(project_path, comparison, figure_paths),
+        _report_markdown(project_path, comparison, figure_paths, smoothing),
         encoding="utf-8",
     )
     return ReportResult(
@@ -164,20 +185,28 @@ def _distribution_table(
 def _scaling_aggregate(runs: tuple[object, ...]) -> pd.DataFrame:
     tables: list[pd.DataFrame] = []
     for run in runs:
-        table = run.scaling[["s", "distance"]].copy()
+        raw_column = "mean_distance_nm" if "mean_distance_nm" in run.scaling else "distance"
+        columns = ["s", raw_column]
+        if "mean_distance_nm_smooth" in run.scaling:
+            columns.append("mean_distance_nm_smooth")
+        table = run.scaling[columns].copy()
+        table = table.rename(columns={raw_column: "distance"})
         table["condition"] = run.condition
         table["replicate_id"] = run.replicate_id
         tables.append(table)
     combined = pd.concat(tables, ignore_index=True)
     rows = []
     for (condition, separation), group in combined.groupby(["condition", "s"], sort=True):
-        rows.append(
-            {
-                "condition": condition,
-                "s": int(separation),
-                "distance_mean": float(group["distance"].mean()),
-            }
-        )
+        row = {
+            "condition": condition,
+            "s": int(separation),
+            "distance_mean": float(group["distance"].mean()),
+        }
+        if "mean_distance_nm_smooth" in group:
+            smooth_values = group["mean_distance_nm_smooth"].dropna()
+            if len(smooth_values):
+                row["distance_smooth_mean"] = float(smooth_values.mean())
+        rows.append(row)
     return pd.DataFrame(rows)
 
 
@@ -185,12 +214,14 @@ def _report_markdown(
     project_dir: Path,
     comparison: ProjectComparison,
     figure_paths: list[Path],
+    smoothing: dict[str, object],
 ) -> str:
     lines = [
         "# protein_analysis_md report",
         "",
         f"Project directory: `{project_dir}`",
         f"WT condition: `{comparison.wt_condition}`",
+        _smoothing_report_line(smoothing),
         "",
         "## Summary Table",
         "",
@@ -220,6 +251,29 @@ def _report_markdown(
         ]
     )
     return "\n".join(lines) + "\n"
+
+
+def _report_smoothing(project_dir: Path) -> dict[str, object]:
+    resolved_path = project_dir / "config_resolved.json"
+    if not resolved_path.is_file():
+        return {}
+    try:
+        payload = json.loads(resolved_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    report = payload.get("report", {})
+    if not isinstance(report, dict):
+        return {}
+    smoothing = report.get("smoothing", {})
+    return dict(smoothing) if isinstance(smoothing, dict) else {}
+
+
+def _smoothing_report_line(smoothing: dict[str, object]) -> str:
+    if not smoothing or not smoothing.get("show_smoothing_metadata", False):
+        return "Smoothing: raw curves are shown unless smoothed columns are explicitly available."
+    ps = "smoothed" if smoothing.get("use_smoothed_ps", False) else "raw"
+    rs = "smoothed" if smoothing.get("use_smoothed_rs", False) else "raw"
+    return f"Smoothing: P(s) plot uses `{ps}` trend display; R(s) plot uses `{rs}` trend display."
 
 
 def _read_manifest(manifest_path: Path) -> list[dict[str, str]]:

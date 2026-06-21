@@ -523,6 +523,8 @@ def _analysis_to_workflow(analysis: dict[str, Any]) -> dict[str, Any]:
         "max_lag",
         "fit_min_s",
         "fit_max_s",
+        "fit_to",
+        "smoothing",
     ):
         if key in analysis:
             payload[key] = analysis[key]

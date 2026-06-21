@@ -49,11 +49,13 @@ def test_stage_1_modules_import() -> None:
         "idrptm.analysis.contacts",
         "idrptm.analysis.ps",
         "idrptm.analysis.scaling",
+        "idrptm.analysis.smoothing",
         "idrptm.analysis.msd",
         "idrptm.analysis.multichain",
         "idrptm.analysis.lifetime",
         "idrptm.analysis.sequence_features",
         "idrptm.analysis.compare",
+            "protein_analysis_md.analysis.smoothing",
         "idrptm.plotting.plots",
         "idrptm.plotting.report",
     ]

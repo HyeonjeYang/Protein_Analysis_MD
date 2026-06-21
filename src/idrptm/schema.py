@@ -398,6 +398,8 @@ class AnalysisConfig(StrictModel):
     max_lag: int | None = None
     fit_min_s: int | None = None
     fit_max_s: int | None = None
+    fit_to: Literal["raw", "smoothed"] = "raw"
+    smoothing: dict[str, object] = Field(default_factory=dict)
 
 
 class WorkflowConfig(StrictModel):

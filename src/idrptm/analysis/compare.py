@@ -288,6 +288,8 @@ def _aggregate_ps(runs: tuple[RunAnalysis, ...]) -> pd.DataFrame:
     rows: list[pd.DataFrame] = []
     for run in runs:
         table = run.ps.copy()
+        if "p_contact" not in table and "p" in table:
+            table["p_contact"] = table["p"]
         table["condition"] = run.condition
         table["replicate_id"] = run.replicate_id
         rows.append(table)
@@ -295,18 +297,27 @@ def _aggregate_ps(runs: tuple[RunAnalysis, ...]) -> pd.DataFrame:
 
     aggregate_rows: list[dict[str, float | int | str]] = []
     for (condition, separation), group in combined.groupby(["condition", "s"], sort=True):
-        values = group["p"].to_numpy(dtype=float)
+        values = group["p_contact"].to_numpy(dtype=float)
         std = float(values.std(ddof=1)) if values.size > 1 else 0.0
-        aggregate_rows.append(
-            {
-                "condition": condition,
-                "s": int(separation),
-                "p_mean": float(values.mean()),
-                "p_std": std,
-                "p_sem": std / float(np.sqrt(values.size)),
-                "n_replicates": int(values.size),
-            }
-        )
+        row: dict[str, float | int | str] = {
+            "condition": condition,
+            "s": int(separation),
+            "p_mean": float(values.mean()),
+            "p_std": std,
+            "p_sem": std / float(np.sqrt(values.size)),
+            "n_replicates": int(values.size),
+        }
+        if "p_contact_smooth" in group:
+            smooth_values = group["p_contact_smooth"].to_numpy(dtype=float)
+            smooth_values = smooth_values[np.isfinite(smooth_values)]
+            if smooth_values.size:
+                smooth_std = (
+                    float(smooth_values.std(ddof=1)) if smooth_values.size > 1 else 0.0
+                )
+                row["p_smooth_mean"] = float(smooth_values.mean())
+                row["p_smooth_std"] = smooth_std
+                row["p_smooth_sem"] = smooth_std / float(np.sqrt(smooth_values.size))
+        aggregate_rows.append(row)
     return pd.DataFrame(aggregate_rows)
 
 
@@ -317,6 +328,22 @@ def _delta_ps(ps_aggregate: pd.DataFrame, wt_condition: str) -> pd.DataFrame:
     merged = rows.merge(wt[["s", "p_wt_mean", "p_wt_sem"]], on="s", how="left")
     merged["delta_p"] = merged["p_mean"] - merged["p_wt_mean"]
     merged["delta_p_sem"] = np.sqrt(merged["p_sem"] ** 2 + merged["p_wt_sem"] ** 2)
+    if {"p_smooth_mean", "p_smooth_sem"}.issubset(ps_aggregate.columns):
+        wt_smooth = wt.rename(
+            columns={
+                "p_smooth_mean": "p_smooth_wt_mean",
+                "p_smooth_sem": "p_smooth_wt_sem",
+            }
+        )
+        merged = merged.merge(
+            wt_smooth[["s", "p_smooth_wt_mean", "p_smooth_wt_sem"]],
+            on="s",
+            how="left",
+        )
+        merged["delta_p_smooth"] = merged["p_smooth_mean"] - merged["p_smooth_wt_mean"]
+        merged["delta_p_smooth_sem"] = np.sqrt(
+            merged["p_smooth_sem"] ** 2 + merged["p_smooth_wt_sem"] ** 2
+        )
     return merged
 
 

@@ -88,15 +88,26 @@ def plot_lines(
     y: str,
     ylabel: str,
     title: str,
+    *,
+    smooth_y: str | None = None,
+    show_raw_points: bool = True,
+    show_smoothed_line: bool = True,
 ) -> plt.Figure:
-    """Plot one line per condition."""
+    """Plot one curve per condition, optionally with raw points and a smoothed line."""
 
     fig, ax = plt.subplots(figsize=(5.5, 4))
+    use_smoothed = bool(smooth_y and smooth_y in table and show_smoothed_line)
     for condition, group in table.groupby("condition", sort=True):
-        ax.plot(group[x], group[y], marker="o", label=condition)
+        if use_smoothed and show_raw_points:
+            ax.scatter(group[x], group[y], s=20, alpha=0.45, label=f"{condition} raw")
+            ax.plot(group[x], group[smooth_y], linewidth=2, label=f"{condition} smoothed")
+        elif use_smoothed:
+            ax.plot(group[x], group[smooth_y], marker="o", label=f"{condition} smoothed")
+        else:
+            ax.plot(group[x], group[y], marker="o", label=condition)
     ax.set_xlabel(_axis_label(x))
     ax.set_ylabel(ylabel)
-    ax.set_title(title)
+    ax.set_title(f"{title} (smoothed trend)" if use_smoothed else title)
     ax.legend(frameon=False)
     return fig
 
@@ -257,9 +268,33 @@ def plot_energy_timeseries(table: pd.DataFrame) -> plt.Figure:
 
     fig, ax = plt.subplots(figsize=(6, 4))
     if "potential_energy_kj_mol" in table:
-        ax.plot(table["time_ns"], table["potential_energy_kj_mol"], label="Potential energy")
+        ax.plot(
+            table["time_ns"],
+            table["potential_energy_kj_mol"],
+            alpha=0.35 if "potential_energy_kj_mol_smooth" in table else 1.0,
+            label="Potential energy raw",
+        )
+    if "potential_energy_kj_mol_smooth" in table:
+        ax.plot(
+            table["time_ns"],
+            table["potential_energy_kj_mol_smooth"],
+            linewidth=2,
+            label="Potential energy smoothed",
+        )
     if "total_energy_kj_mol" in table:
-        ax.plot(table["time_ns"], table["total_energy_kj_mol"], label="Total energy")
+        ax.plot(
+            table["time_ns"],
+            table["total_energy_kj_mol"],
+            alpha=0.35 if "total_energy_kj_mol_smooth" in table else 1.0,
+            label="Total energy raw",
+        )
+    if "total_energy_kj_mol_smooth" in table:
+        ax.plot(
+            table["time_ns"],
+            table["total_energy_kj_mol_smooth"],
+            linewidth=2,
+            label="Total energy smoothed",
+        )
     ax.set_xlabel("Time (ns)")
     ax.set_ylabel("Energy (kJ/mol)")
     ax.set_title("Energy timeseries")

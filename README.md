@@ -161,6 +161,11 @@ arrays without importing CALVADOS. Implemented observables include Rg, Ree,
 contact maps, P(s), internal-distance scaling, Flory exponent fitting, contact
 lifetime, and center-of-mass MSD.
 
+Optional smoothing can append visualization-oriented trend columns for noisy
+P(s), R(s), Rg/Ree, energy, and contact-map outputs without overwriting raw
+data. Standard reports can show raw points plus smoothed P(s)/R(s) trend lines;
+details are in [docs/smoothing.md](docs/smoothing.md).
+
 When per-residue chain metadata are available, analysis also supports
 chain-resolved Rg/Ree, intra-chain and inter-chain contact maps, chain COM
 distances, per-chain COM MSD, cluster-size time series, and inter-protein
@@ -191,7 +196,8 @@ condition-average contact maps, and delta contact maps under `comparison/`.
 
 `pamd report PROJECT_DIR` writes `report/report.md` plus PNG and PDF figures
 for Rg, Ree, contact maps, delta contact maps, P(s), R(s), PTM site annotation,
-and the scalar summary table.
+and the scalar summary table. When smoothing columns are present and enabled by
+the report preset, P(s) and R(s) figures label the smoothed trend display.
 
 ## Development
 

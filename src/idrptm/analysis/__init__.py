@@ -11,7 +11,7 @@ from idrptm.analysis.cleavage import (
     original_sequence_coordinate_contact_map,
 )
 from idrptm.analysis.contacts import contact_map_from_positions
-from idrptm.analysis.energy import parse_energy_log, write_energy_outputs
+from idrptm.analysis.energy import parse_energy_log, smooth_energy_timeseries, write_energy_outputs
 from idrptm.analysis.equilibration import (
     block_means,
     equilibration_diagnostics,
@@ -41,6 +41,14 @@ from idrptm.analysis.scaling import (
     fit_flory_exponent,
     internal_distance_scaling,
 )
+from idrptm.analysis.smoothing import (
+    bootstrap_smooth_ci,
+    coarse_bin_curve,
+    logspace_smooth_1d,
+    rolling_smooth_1d,
+    savgol_smooth_1d,
+    smooth_contact_map,
+)
 
 __all__ = [
     "FloryFit",
@@ -51,6 +59,8 @@ __all__ = [
     "chain_com_msd",
     "cluster_size_timeseries",
     "block_means",
+    "bootstrap_smooth_ci",
+    "coarse_bin_curve",
     "com_msd",
     "com_distance_timeseries",
     "contact_lifetime",
@@ -68,6 +78,7 @@ __all__ = [
     "internal_distance_scaling",
     "intra_chain_contact_map",
     "load_calvados_trajectory",
+    "logspace_smooth_1d",
     "largest_cluster_fraction",
     "original_sequence_coordinate_contact_map",
     "p_of_s",
@@ -75,8 +86,12 @@ __all__ = [
     "per_chain_ree",
     "per_chain_rg",
     "ree_timeseries",
+    "rolling_smooth_1d",
     "running_mean",
     "rg_timeseries",
+    "savgol_smooth_1d",
+    "smooth_contact_map",
+    "smooth_energy_timeseries",
     "write_equilibration_outputs",
     "write_energy_outputs",
 ]

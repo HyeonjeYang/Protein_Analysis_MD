@@ -91,11 +91,27 @@ SIMULATION_PRESETS: dict[SimulationPresetName, dict[str, Any]] = {
 }
 
 ANALYSIS_PRESETS: dict[AnalysisPresetName, dict[str, Any]] = {
-    "minimal": {"observables": ["rg", "ree", "energy"]},
+    "minimal": {"observables": ["rg", "ree", "energy"], "smoothing": {}},
     "standard_idr": {
         "observables": ["rg", "ree", "contacts", "ps", "scaling", "msd", "energy"],
         "contact_cutoff_nm": 0.8,
         "min_sequence_separation": 1,
+        "smoothing": {
+            "ps": {
+                "enabled": True,
+                "method": "logspace",
+                "window_log10": 0.2,
+                "min_points": 5,
+                "robust": True,
+            },
+            "rs": {
+                "enabled": True,
+                "method": "logspace",
+                "window_log10": 0.2,
+                "min_points": 5,
+                "robust": True,
+            },
+        },
     },
     "standard_cleavage": {
         "observables": [
@@ -111,6 +127,23 @@ ANALYSIS_PRESETS: dict[AnalysisPresetName, dict[str, Any]] = {
         ],
         "contact_cutoff_nm": 0.8,
         "min_sequence_separation": 1,
+        "smoothing": {
+            "ps": {
+                "enabled": True,
+                "method": "logspace",
+                "window_log10": 0.2,
+                "min_points": 5,
+                "robust": True,
+            },
+            "rs": {
+                "enabled": True,
+                "method": "logspace",
+                "window_log10": 0.2,
+                "min_points": 5,
+                "robust": True,
+            },
+            "energy": {"enabled": True, "method": "rolling", "window": 25},
+        },
     },
     "standard_phase": {
         "observables": [
@@ -122,6 +155,10 @@ ANALYSIS_PRESETS: dict[AnalysisPresetName, dict[str, Any]] = {
         ],
         "contact_cutoff_nm": 0.8,
         "min_sequence_separation": 1,
+        "smoothing": {
+            "density_profile": {"enabled": True, "method": "rolling", "window": 5},
+            "energy": {"enabled": True, "method": "rolling", "window": 25},
+        },
     },
     "full": {
         "observables": [
@@ -138,13 +175,68 @@ ANALYSIS_PRESETS: dict[AnalysisPresetName, dict[str, Any]] = {
         ],
         "contact_cutoff_nm": 0.8,
         "min_sequence_separation": 1,
+        "smoothing": {
+            "ps": {
+                "enabled": True,
+                "method": "logspace",
+                "window_log10": 0.2,
+                "min_points": 5,
+                "robust": True,
+            },
+            "rs": {
+                "enabled": True,
+                "method": "logspace",
+                "window_log10": 0.2,
+                "min_points": 5,
+                "robust": True,
+            },
+            "rg": {"enabled": True, "method": "rolling", "window": 25},
+            "ree": {"enabled": True, "method": "rolling", "window": 25},
+            "energy": {"enabled": True, "method": "rolling", "window": 25},
+            "contact_map": {
+                "enabled": False,
+                "method": "gaussian",
+                "sigma": 1.0,
+                "visualization_only": True,
+            },
+        },
     },
 }
 
 REPORT_PRESETS: dict[ReportPresetName, dict[str, Any]] = {
-    "minimal": {"formats": ["png"], "html": False},
-    "standard": {"formats": ["png", "pdf"], "html": False},
-    "publication_draft": {"formats": ["png", "pdf"], "html": True},
+    "minimal": {
+        "formats": ["png"],
+        "html": False,
+        "smoothing": {
+            "use_smoothed_ps": False,
+            "use_smoothed_rs": False,
+            "show_raw_points": True,
+            "show_smoothed_line": False,
+            "show_smoothing_metadata": False,
+        },
+    },
+    "standard": {
+        "formats": ["png", "pdf"],
+        "html": False,
+        "smoothing": {
+            "use_smoothed_ps": True,
+            "use_smoothed_rs": True,
+            "show_raw_points": True,
+            "show_smoothed_line": True,
+            "show_smoothing_metadata": True,
+        },
+    },
+    "publication_draft": {
+        "formats": ["png", "pdf"],
+        "html": True,
+        "smoothing": {
+            "use_smoothed_ps": True,
+            "use_smoothed_rs": True,
+            "show_raw_points": True,
+            "show_smoothed_line": True,
+            "show_smoothing_metadata": True,
+        },
+    },
 }
 
 

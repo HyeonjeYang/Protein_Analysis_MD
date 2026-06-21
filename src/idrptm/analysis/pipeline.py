@@ -31,6 +31,12 @@ from idrptm.analysis.ps import p_of_s
 from idrptm.analysis.ree import ree_timeseries
 from idrptm.analysis.rg import rg_timeseries
 from idrptm.analysis.scaling import fit_flory_exponent, internal_distance_scaling
+from idrptm.analysis.smoothing import (
+    logspace_smooth_1d,
+    rolling_smooth_1d,
+    savgol_smooth_1d,
+    smooth_contact_map,
+)
 from idrptm.schema import AnalysisConfig, WorkflowConfig, load_config
 from idrptm.units import analysis_output_units, summary_units, write_units_metadata
 
@@ -100,6 +106,7 @@ def analyze_trajectory_data(
     rg = rg_timeseries(positions)
     rg_table = frame_data.copy()
     rg_table["rg"] = rg
+    _append_timeseries_smoothing(rg_table, config, key="rg", value_column="rg")
     outputs["timeseries_rg"] = _write_parquet(
         rg_table,
         output_path / "timeseries_rg.parquet",
@@ -109,6 +116,7 @@ def analyze_trajectory_data(
     ree = ree_timeseries(positions)
     ree_table = frame_data.copy()
     ree_table["ree"] = ree
+    _append_timeseries_smoothing(ree_table, config, key="ree", value_column="ree")
     outputs["timeseries_ree"] = _write_parquet(
         ree_table,
         output_path / "timeseries_ree.parquet",
@@ -124,11 +132,32 @@ def analyze_trajectory_data(
     np.save(contact_map_path, contact_map)
     write_units_metadata(contact_map_path, analysis_output_units("contact_map"))
     outputs["contact_map"] = contact_map_path
+    contact_map_smoothing = _enabled_smoothing(config, "contact_map")
+    if contact_map_smoothing:
+        smoothed_map = smooth_contact_map(
+            contact_map,
+            method=str(contact_map_smoothing.get("method", "none")),
+            sigma=float(contact_map_smoothing.get("sigma", 1.0)),
+            size=int(contact_map_smoothing.get("size", 3)),
+            preserve_diagonal=bool(contact_map_smoothing.get("preserve_diagonal", True)),
+        )
+        smoothed_map_path = output_path / "contact_map_smoothed.npy"
+        np.save(smoothed_map_path, smoothed_map)
+        write_units_metadata(smoothed_map_path, analysis_output_units("contact_map"))
+        outputs["contact_map_smoothed"] = smoothed_map_path
 
     ps_table = p_of_s(contact_map)
+    _append_logspace_smoothing(ps_table, config, key="ps", value_column="p_contact")
     outputs["ps"] = _write_parquet(ps_table, output_path / "ps.parquet", output_name="ps")
 
     scaling = internal_distance_scaling(positions)
+    _append_logspace_smoothing(
+        scaling,
+        config,
+        key="rs",
+        value_column="mean_distance_nm",
+        output_column="mean_distance_nm_smooth",
+    )
     outputs["scaling"] = _write_parquet(
         scaling,
         output_path / "scaling.parquet",
@@ -137,11 +166,20 @@ def analyze_trajectory_data(
 
     flory_fit = None
     if len(scaling) >= 2:
-        flory_fit = fit_flory_exponent(
-            scaling,
-            min_s=config.fit_min_s,
-            max_s=config.fit_max_s,
-        )
+        if config.fit_to == "smoothed" and "mean_distance_nm_smooth" in scaling:
+            fit_distances = scaling["mean_distance_nm_smooth"].to_numpy(dtype=float)
+            flory_fit = fit_flory_exponent(
+                s=scaling["s"].to_numpy(dtype=float),
+                distances=fit_distances,
+                min_s=config.fit_min_s,
+                max_s=config.fit_max_s,
+            )
+        else:
+            flory_fit = fit_flory_exponent(
+                scaling,
+                min_s=config.fit_min_s,
+                max_s=config.fit_max_s,
+            )
 
     if "msd" in enabled:
         outputs["msd"] = _write_parquet(
@@ -185,6 +223,7 @@ def analyze_trajectory_data(
                 contact_map=contact_map,
                 flory_fit=flory_fit,
                 outputs=outputs,
+                smoothing=_summary_smoothing(config),
             ),
             indent=2,
         )
@@ -314,6 +353,7 @@ def _summary(
     contact_map: np.ndarray,
     flory_fit: object | None,
     outputs: dict[str, Path],
+    smoothing: dict[str, object],
 ) -> dict[str, object]:
     contact_upper = contact_map[np.triu_indices_from(contact_map, k=1)]
     summary: dict[str, object] = {
@@ -333,7 +373,9 @@ def _summary(
             "contact_cutoff_nm": analysis_config.contact_cutoff_nm,
             "min_sequence_separation": analysis_config.min_sequence_separation,
             "max_lag": analysis_config.max_lag,
+            "fit_to": analysis_config.fit_to,
         },
+        "smoothing": smoothing,
         "rg_mean": float(np.mean(rg)),
         "rg_std": float(np.std(rg)),
         "ree_mean": float(np.mean(ree)),
@@ -351,6 +393,96 @@ def _summary(
             "n_points": flory_fit.n_points,
         }
     return summary
+
+
+def _enabled_smoothing(config: AnalysisConfig, key: str) -> dict[str, object]:
+    smoothing = config.smoothing.get(key, {}) if isinstance(config.smoothing, dict) else {}
+    if not isinstance(smoothing, dict) or not smoothing.get("enabled", False):
+        return {}
+    return smoothing
+
+
+def _append_logspace_smoothing(
+    table: pd.DataFrame,
+    config: AnalysisConfig,
+    *,
+    key: str,
+    value_column: str,
+    output_column: str | None = None,
+) -> None:
+    smoothing = _enabled_smoothing(config, key)
+    if not smoothing:
+        return
+    method = str(smoothing.get("method", "logspace"))
+    if method != "logspace":
+        raise ValueError(f"{key} smoothing currently supports method='logspace'.")
+    smoothed = logspace_smooth_1d(
+        table["s"].to_numpy(dtype=float),
+        table[value_column].to_numpy(dtype=float),
+        window_log10=float(smoothing.get("window_log10", 0.2)),
+        min_points=int(smoothing.get("min_points", 5)),
+        robust=bool(smoothing.get("robust", True)),
+    )
+    target = output_column or f"{value_column}_smooth"
+    table[target] = smoothed["y_smooth"].to_numpy(dtype=float)
+    table["n_points_smooth_window"] = smoothed["n_points_window"].to_numpy(dtype=int)
+    table["smoothing_method"] = smoothed["smoothing_method"].to_numpy()
+    table["smoothing_window_log10"] = smoothed["smoothing_window_log10"].to_numpy(dtype=float)
+
+
+def _append_timeseries_smoothing(
+    table: pd.DataFrame,
+    config: AnalysisConfig,
+    *,
+    key: str,
+    value_column: str,
+) -> None:
+    smoothing = _enabled_smoothing(config, key)
+    if not smoothing:
+        return
+    x_column = "time_ps" if "time_ps" in table else "frame"
+    method = str(smoothing.get("method", "rolling"))
+    if method == "rolling":
+        smoothed = rolling_smooth_1d(
+            table[x_column].to_numpy(dtype=float),
+            table[value_column].to_numpy(dtype=float),
+            window=int(smoothing.get("window", 25)),
+            method=str(smoothing.get("rolling_method", "mean")),
+            center=bool(smoothing.get("center", True)),
+        )
+    elif method == "savgol":
+        smoothed = savgol_smooth_1d(
+            table[x_column].to_numpy(dtype=float),
+            table[value_column].to_numpy(dtype=float),
+            window_length=int(smoothing.get("window_length", 25)),
+            polyorder=int(smoothing.get("polyorder", 2)),
+        )
+    else:
+        raise ValueError(f"{key} smoothing supports method='rolling' or 'savgol'.")
+    table[f"{value_column}_nm_smooth"] = smoothed["y_smooth"].to_numpy(dtype=float)
+    table[f"{value_column}_smoothing_method"] = smoothed["smoothing_method"].to_numpy()
+
+
+def _summary_smoothing(config: AnalysisConfig) -> dict[str, object]:
+    metadata: dict[str, object] = {}
+    for key, value in (config.smoothing or {}).items():
+        if isinstance(value, dict):
+            metadata[key] = dict(value)
+    if "ps" in metadata:
+        metadata["ps"] |= {
+            "raw_column": "p_contact",
+            "smoothed_column": "p_contact_smooth",
+        }
+    if "rs" in metadata:
+        metadata["rs"] |= {
+            "raw_column": "mean_distance_nm",
+            "smoothed_column": "mean_distance_nm_smooth",
+        }
+    if "rg" in metadata:
+        metadata["rg"] |= {"raw_column": "rg", "smoothed_column": "rg_nm_smooth"}
+    if "ree" in metadata:
+        metadata["ree"] |= {"raw_column": "ree", "smoothed_column": "ree_nm_smooth"}
+    return metadata
 
 
 def _cache_key(trajectory: TrajectoryData, config: AnalysisConfig) -> dict[str, object]:

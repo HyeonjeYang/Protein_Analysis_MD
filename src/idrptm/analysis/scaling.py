@@ -41,11 +41,16 @@ def internal_distance_scaling(positions: ArrayLike) -> pd.DataFrame:
         {
             "s": separation,
             "distance": float(np.mean(values)),
+            "mean_distance_nm": float(np.mean(values)),
+            "std_distance_nm": float(np.std(values, ddof=1)) if len(values) > 1 else 0.0,
             "n_pairs": len(values),
         }
         for separation, values in accumulators.items()
     ]
-    return pd.DataFrame(rows, columns=["s", "distance", "n_pairs"])
+    return pd.DataFrame(
+        rows,
+        columns=["s", "distance", "mean_distance_nm", "std_distance_nm", "n_pairs"],
+    )
 
 
 def fit_flory_exponent(
@@ -59,10 +64,11 @@ def fit_flory_exponent(
     """Fit the Flory exponent ``nu`` from internal-distance scaling data."""
 
     if scaling is not None:
-        if "s" not in scaling or "distance" not in scaling:
-            raise ValueError("scaling must contain 's' and 'distance' columns.")
+        distance_column = "distance" if "distance" in scaling else "mean_distance_nm"
+        if "s" not in scaling or distance_column not in scaling:
+            raise ValueError("scaling must contain 's' and a distance column.")
         s_values = scaling["s"].to_numpy(dtype=float)
-        distance_values = scaling["distance"].to_numpy(dtype=float)
+        distance_values = scaling[distance_column].to_numpy(dtype=float)
     else:
         if s is None or distances is None:
             raise ValueError("Provide either scaling or both s and distances.")
