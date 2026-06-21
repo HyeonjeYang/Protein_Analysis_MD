@@ -36,6 +36,8 @@ analysis_outputs/
 reports/
 checkpoints/
 logs/
+pymol/
+pymol_exports/
 
 # Generated report/figure outputs
 figures/
@@ -47,6 +49,7 @@ report.md
 *.pdf
 *.svg
 *.html
+*.pml
 *.units.json
 
 # MD trajectory/checkpoint formats

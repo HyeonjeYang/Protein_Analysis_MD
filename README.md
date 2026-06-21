@@ -202,6 +202,21 @@ environment, OpenMM platform availability, and progress estimates. `pamd run`
 shows tqdm progress from written DCD frames when possible; disable it with
 `--no-progress`.
 
+### PyMOL Export
+
+After runs have written `top.pdb` and DCD files, organize PyMOL-friendly assets:
+
+```bash
+pamd pymol runs/<PROJECT_DIR>
+```
+
+This writes `runs/<PROJECT_DIR>/pymol/` with one folder per run, standardized
+`topology.pdb`/`trajectory.dcd` names, per-run `load.pml` scripts, a
+`load_all.pml`, and `pymol_manifest.csv`. Large trajectories are symlinked by
+default. Use `--mode copy` when a portable folder is needed, or
+`--include-missing` to create placeholder PyMOL folders before every run has
+finished.
+
 ## Repository Structure
 
 ```text

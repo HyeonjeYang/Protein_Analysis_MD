@@ -11,6 +11,11 @@ import pandas as pd
 from matplotlib.figure import Figure
 
 from idrptm.plotting.plots import save_figure
+from idrptm.visualization.pymol import (
+    PyMOLExportResult,
+    PyMOLRunExport,
+    export_pymol_project,
+)
 
 
 @dataclass(frozen=True)
@@ -50,4 +55,10 @@ def save_visualization(
     return VisualizationArtifact(png=png, pdf=pdf, data=data_path, metadata=metadata_path)
 
 
-__all__ = ["VisualizationArtifact", "save_visualization"]
+__all__ = [
+    "PyMOLExportResult",
+    "PyMOLRunExport",
+    "VisualizationArtifact",
+    "export_pymol_project",
+    "save_visualization",
+]

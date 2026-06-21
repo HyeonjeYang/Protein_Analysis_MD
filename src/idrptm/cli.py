@@ -996,6 +996,56 @@ def report_command(
     typer.echo(f"Wrote {len(result.figure_paths)} figure file(s).")
 
 
+@app.command("pymol")
+def pymol_command(
+    project_dir: Annotated[
+        Path,
+        typer.Argument(help="Project directory containing manifest.csv and run directories."),
+    ],
+    output_dir: Annotated[
+        Path | None,
+        typer.Option("--output-dir", "-o", help="PyMOL export directory."),
+    ] = None,
+    mode: Annotated[
+        str,
+        typer.Option("--mode", help="Asset mode: symlink or copy."),
+    ] = "symlink",
+    include_missing: Annotated[
+        bool,
+        typer.Option(
+            "--include-missing",
+            help="Write PyMOL folders even when topology/trajectory files are missing.",
+        ),
+    ] = False,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Replace existing exported links/files."),
+    ] = False,
+) -> None:
+    """Organize completed run files for PyMOL visualization."""
+
+    from idrptm.visualization.pymol import ExportMode, export_pymol_project
+
+    try:
+        if mode not in {"symlink", "copy"}:
+            raise ValueError("--mode must be 'symlink' or 'copy'.")
+        result = export_pymol_project(
+            project_dir,
+            output_dir=output_dir,
+            mode=cast(ExportMode, mode),
+            include_missing=include_missing,
+            force=force,
+        )
+    except Exception as exc:
+        typer.echo(f"PyMOL export failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    ready = sum(1 for item in result.runs if item.status == "ready")
+    typer.echo(f"PyMOL export: {result.output_dir}")
+    typer.echo(f"Ready runs: {ready}/{len(result.runs)}")
+    typer.echo(f"Manifest: {result.manifest_csv}")
+    typer.echo(f"Load all script: {result.load_all_pml}")
+
+
 @app.command("repo-check")
 def repo_check_command(
     output: Annotated[
