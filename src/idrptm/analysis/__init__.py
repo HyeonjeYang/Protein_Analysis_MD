@@ -12,6 +12,12 @@ from idrptm.analysis.cleavage import (
 )
 from idrptm.analysis.contacts import contact_map_from_positions
 from idrptm.analysis.energy import parse_energy_log, write_energy_outputs
+from idrptm.analysis.equilibration import (
+    block_means,
+    equilibration_diagnostics,
+    running_mean,
+    write_equilibration_outputs,
+)
 from idrptm.analysis.io import TrajectoryData, load_calvados_trajectory
 from idrptm.analysis.lifetime import contact_lifetime
 from idrptm.analysis.msd import com_msd
@@ -44,11 +50,13 @@ __all__ = [
     "analyze_trajectory_data",
     "chain_com_msd",
     "cluster_size_timeseries",
+    "block_means",
     "com_msd",
     "com_distance_timeseries",
     "contact_lifetime",
     "contact_map_from_positions",
     "density_profile_z",
+    "equilibration_diagnostics",
     "fit_flory_exponent",
     "fragment_cluster_size",
     "fragment_resolved_ree",
@@ -67,6 +75,8 @@ __all__ = [
     "per_chain_ree",
     "per_chain_rg",
     "ree_timeseries",
+    "running_mean",
     "rg_timeseries",
+    "write_equilibration_outputs",
     "write_energy_outputs",
 ]

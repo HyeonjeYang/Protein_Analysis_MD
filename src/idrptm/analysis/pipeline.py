@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -12,6 +13,7 @@ import pandas as pd
 
 from idrptm.analysis._validation import as_position_trajectory, pairwise_distances
 from idrptm.analysis.contacts import contact_map_from_positions
+from idrptm.analysis.equilibration import write_equilibration_outputs
 from idrptm.analysis.io import TrajectoryData, load_calvados_trajectory
 from idrptm.analysis.lifetime import contact_lifetime
 from idrptm.analysis.msd import com_msd
@@ -51,6 +53,7 @@ def analyze_run_directory(
     trajectory: str | Path | None = None,
     trajectory_reader: Literal["mdtraj", "mdanalysis"] = "mdtraj",
     output_dir: str | Path | None = None,
+    force: bool = False,
 ) -> AnalysisResult:
     """Load a CALVADOS run directory and write analysis outputs."""
 
@@ -65,7 +68,12 @@ def analyze_run_directory(
         engine=trajectory_reader,
     )
     root = Path(output_dir) if output_dir is not None else Path(run_dir) / "analysis"
-    return analyze_trajectory_data(data, output_dir=root, analysis_config=analysis_config)
+    return analyze_trajectory_data(
+        data,
+        output_dir=root,
+        analysis_config=analysis_config,
+        force=force,
+    )
 
 
 def analyze_trajectory_data(
@@ -73,6 +81,7 @@ def analyze_trajectory_data(
     *,
     output_dir: str | Path,
     analysis_config: AnalysisConfig | None = None,
+    force: bool = False,
 ) -> AnalysisResult:
     """Run configured analyses for an already-loaded trajectory."""
 
@@ -80,6 +89,10 @@ def analyze_trajectory_data(
     enabled = {observable.lower() for observable in config.observables}
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+    cache_key = _cache_key(trajectory, config)
+    cached = _cached_result(output_path, cache_key)
+    if cached is not None and not force:
+        return cached
     positions = as_position_trajectory(trajectory.positions)
     frame_data = _frame_table(trajectory)
     outputs: dict[str, Path] = {}
@@ -179,6 +192,8 @@ def analyze_trajectory_data(
         encoding="utf-8",
     )
     outputs["summary"] = summary_path
+    write_equilibration_outputs(output_path)
+    _write_cache_manifest(output_path, cache_key, outputs)
     return AnalysisResult(output_dir=output_path, summary_json=summary_path, outputs=outputs)
 
 
@@ -336,3 +351,70 @@ def _summary(
             "n_points": flory_fit.n_points,
         }
     return summary
+
+
+def _cache_key(trajectory: TrajectoryData, config: AnalysisConfig) -> dict[str, object]:
+    return {
+        "topology": _file_fingerprint(trajectory.topology_path),
+        "trajectory": _file_fingerprint(trajectory.trajectory_path),
+        "analysis_config": config.model_dump(mode="json"),
+        "software": "protein_analysis_md",
+        "units_version": 1,
+    }
+
+
+def _file_fingerprint(path: str | Path | None) -> dict[str, object]:
+    if path is None:
+        return {}
+    file_path = Path(path)
+    if not file_path.exists():
+        return {
+            "path": str(file_path),
+            "exists": False,
+        }
+    stat = file_path.stat()
+    return {
+        "path": str(file_path),
+        "exists": True,
+        "size": stat.st_size,
+        "mtime_ns": stat.st_mtime_ns,
+    }
+
+
+def _cached_result(output_path: Path, cache_key: dict[str, object]) -> AnalysisResult | None:
+    cache_path = output_path / "cache_manifest.json"
+    summary_path = output_path / "summary.json"
+    if not cache_path.exists() or not summary_path.exists():
+        return None
+    try:
+        payload = json.loads(cache_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    if payload.get("cache_key") != cache_key:
+        return None
+    outputs = {
+        name: Path(path)
+        for name, path in payload.get("outputs", {}).items()
+        if isinstance(path, str) and os.path.exists(path)
+    }
+    outputs["summary"] = summary_path
+    return AnalysisResult(output_dir=output_path, summary_json=summary_path, outputs=outputs)
+
+
+def _write_cache_manifest(
+    output_path: Path,
+    cache_key: dict[str, object],
+    outputs: dict[str, Path],
+) -> None:
+    cache_path = output_path / "cache_manifest.json"
+    cache_path.write_text(
+        json.dumps(
+            {
+                "cache_key": cache_key,
+                "outputs": {name: str(path) for name, path in outputs.items()},
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )

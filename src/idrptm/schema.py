@@ -352,6 +352,7 @@ class CalvadosConfig(StrictModel):
     temperature_k: float = 293.0
     ph: float = 7.4
     ionic_m: float = 0.19
+    platform: SimulationPlatform | None = None
     topol: PlacementMode = "center"
     simulation: SimulationConfig = Field(default_factory=SimulationConfig)
     verbose: bool = True
@@ -365,6 +366,8 @@ class CalvadosConfig(StrictModel):
 
         if len(self.box_nm) != 3:
             raise ValueError("calvados.box_nm must contain exactly three dimensions.")
+        if self.platform is not None:
+            self.simulation = self.simulation.model_copy(update={"platform": self.platform})
         return self
 
 
@@ -409,6 +412,9 @@ class WorkflowConfig(StrictModel):
     calvados: CalvadosConfig = Field(default_factory=CalvadosConfig)
     runner: RunnerConfig = Field(default_factory=RunnerConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
+    compiled: dict[str, object] = Field(default_factory=dict)
+    units: dict[str, object] = Field(default_factory=dict)
+    storage_estimate: dict[str, object] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def normalize_protein_inputs(self) -> WorkflowConfig:
@@ -460,8 +466,12 @@ def load_config(path: str | Path) -> WorkflowConfig:
     """Load a workflow YAML file into a typed configuration model."""
 
     config_path = Path(path)
+    if config_path.is_dir():
+        config_path = config_path / "project.lock.yaml"
     with config_path.open("r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle)
+    if isinstance(data, dict) and "workflow" in data and isinstance(data["workflow"], dict):
+        data = data["workflow"]
     config = WorkflowConfig.model_validate(data)
     if (
         config.sequence is not None

@@ -21,6 +21,9 @@ def test_cli_help_works() -> None:
     assert "report" in result.output
     assert "search-uniprot" in result.output
     assert "estimate-size" in result.output
+    assert "compile" in result.output
+    assert "wizard" in result.output
+    assert "status" in result.output
 
 
 def test_pamd_wrapper_help_works() -> None:

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Annotated, Literal, cast
 
 import typer
+import yaml
 
 from idrptm import __version__
 from idrptm.runner import RunPhase
@@ -147,14 +148,46 @@ def estimate_size_command(
 ) -> None:
     """Estimate trajectory storage for a workflow before running simulations."""
 
+    from idrptm.configuration import resolve_config_target
     from idrptm.storage import estimate_from_config_file, format_storage_table
 
     try:
-        estimate = estimate_from_config_file(config, output_dir=output_dir)
+        estimate = estimate_from_config_file(resolve_config_target(config), output_dir=output_dir)
     except Exception as exc:
         typer.echo(f"Storage estimate failed: {exc}", err=True)
         raise typer.Exit(1) from exc
     typer.echo(format_storage_table(estimate))
+
+
+@app.command("compile")
+def compile_command(
+    config: Annotated[Path, typer.Argument(help="Short or explicit workflow YAML.")],
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Overwrite existing project.lock.yaml."),
+    ] = False,
+) -> None:
+    """Compile a concise config into locked project configuration files."""
+
+    from idrptm.configuration import compile_config_file
+
+    try:
+        locked = compile_config_file(config, force=force)
+    except Exception as exc:
+        typer.echo(f"Compile failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    storage = locked.resolved.get("storage_estimate", {})
+    total_gb = storage.get("total_dcd_gb") if isinstance(storage, dict) else None
+    typer.echo(f"Project: {locked.workflow.project}")
+    typer.echo(f"Project dir: {locked.project_dir}")
+    typer.echo(f"Lock: {locked.lock_yaml}")
+    typer.echo(f"Resolved JSON: {locked.resolved_json}")
+    typer.echo(f"Simulation preset: {locked.workflow.compiled.get('simulation_preset', 'custom')}")
+    typer.echo(f"Analysis preset: {locked.workflow.compiled.get('analysis_preset', 'custom')}")
+    if total_gb is not None:
+        typer.echo(f"Estimated DCD storage: {float(total_gb):.4f} GB")
+    for warning in locked.warnings:
+        typer.echo(f"Warning: {warning}")
 
 
 @app.command("design")
@@ -170,10 +203,11 @@ def design_command(
 ) -> None:
     """Generate WT/PTM design manifest, FASTA files, and metadata stubs."""
 
+    from idrptm.configuration import resolve_config_target
     from idrptm.design import design_from_config_file
 
     try:
-        result = design_from_config_file(config, output_dir=output_dir)
+        result = design_from_config_file(resolve_config_target(config), output_dir=output_dir)
     except Exception as exc:
         typer.echo(f"Design failed: {exc}", err=True)
         raise typer.Exit(1) from exc
@@ -201,9 +235,14 @@ def prepare_command(
     """Prepare CALVADOS run directories from a workflow config."""
 
     from idrptm.calvados_adapter import prepare_from_config_file
+    from idrptm.configuration import resolve_config_target
 
     try:
-        result = prepare_from_config_file(config, output_dir=output_dir, dry_run=dry_run)
+        result = prepare_from_config_file(
+            resolve_config_target(config),
+            output_dir=output_dir,
+            dry_run=dry_run,
+        )
     except Exception as exc:
         typer.echo(f"Prepare failed: {exc}", err=True)
         raise typer.Exit(1) from exc
@@ -273,6 +312,79 @@ def run_command(
         typer.echo(f"{result.run_dir}: {result.status} ({result.status_json})")
     if failed:
         raise typer.Exit(1)
+
+
+@app.command("run-recipe")
+def run_recipe_command(
+    recipe: Annotated[Path, typer.Argument(help="Python recipe file.")],
+) -> None:
+    """Execute a Python recipe; compile an ``experiment`` variable if present."""
+
+    import runpy
+
+    try:
+        namespace = runpy.run_path(str(recipe))
+        experiment = namespace.get("experiment") or namespace.get("exp")
+        if experiment is not None and hasattr(experiment, "compile"):
+            locked = experiment.compile(force=True)
+            typer.echo(f"Compiled recipe to: {locked.lock_yaml}")
+        else:
+            typer.echo(f"Executed recipe: {recipe}")
+    except Exception as exc:
+        typer.echo(f"Recipe failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
+@app.command("wizard")
+def wizard_command() -> None:
+    """Interactively generate a concise YAML config without running MD."""
+
+    try:
+        project_name = typer.prompt("Project name", default="my_project")
+        source = typer.prompt("Protein source (direct/fasta/uniprot)", default="direct")
+        protein: dict[str, object] = {"source": source, "charge_termini": "both"}
+        if source == "direct":
+            protein["name"] = typer.prompt("Protein name", default="ProteinA")
+            protein["sequence"] = typer.prompt("Sequence")
+        elif source == "fasta":
+            protein["name"] = typer.prompt("Protein name", default="ProteinA")
+            protein["fasta"] = typer.prompt("FASTA path")
+        elif source == "uniprot":
+            protein["query"] = typer.prompt("UniProt query")
+            protein["organism"] = typer.prompt("Organism", default="Homo sapiens")
+            protein["reviewed_only"] = typer.confirm("Reviewed Swiss-Prot only?", default=True)
+            protein["interactive_select"] = True
+        else:
+            raise ValueError("Protein source must be direct, fasta, or uniprot.")
+        experiment_type = typer.prompt(
+            "Experiment type (smoke/production/ptm/cleavage/phase)",
+            default="smoke",
+        )
+        preset = {
+            "smoke": "smoke_single_chain",
+            "production": "production_single_chain",
+            "ptm": "short_single_chain",
+            "cleavage": "cleavage_smoke",
+            "phase": "phase_smoke",
+        }.get(experiment_type, "smoke_single_chain")
+        output = Path(typer.prompt("Output config path", default=f"configs/{project_name}.yaml"))
+        config = {
+            "project": {"name": project_name, "outdir": f"runs/{project_name}"},
+            "input": {
+                "protein": protein,
+                "ptm": {"mode": "none"},
+                "cleavage": {"mode": "none"},
+            },
+            "protocol": {"preset": preset},
+            "analysis": {"preset": "standard_idr"},
+            "report": {"preset": "standard"},
+        }
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    except Exception as exc:
+        typer.echo(f"Wizard failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(f"Wrote config: {output}")
 
 
 @app.command("hpc-script")
@@ -361,6 +473,10 @@ def analyze_command(
             help="Trajectory reader backend: mdtraj or mdanalysis.",
         ),
     ] = "mdtraj",
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Recompute analysis even if cache is valid."),
+    ] = False,
 ) -> None:
     """Analyze a prepared CALVADOS trajectory."""
 
@@ -376,6 +492,7 @@ def analyze_command(
             trajectory=trajectory,
             trajectory_reader=cast(TrajectoryReader, trajectory_reader),
             output_dir=output_dir,
+            force=force,
         )
     except Exception as exc:
         typer.echo(f"Analyze failed: {exc}", err=True)
@@ -383,6 +500,118 @@ def analyze_command(
 
     typer.echo(f"Wrote analysis outputs to: {result.output_dir}")
     typer.echo(f"Summary: {result.summary_json}")
+
+
+@app.command("status")
+def status_command(
+    project_dir: Annotated[Path, typer.Argument(help="Compiled/prepared project directory.")],
+) -> None:
+    """Summarize project run status."""
+
+    from idrptm.project import format_project_status, summarize_project_status
+
+    typer.echo(format_project_status(summarize_project_status(project_dir)))
+
+
+@app.command("resume")
+def resume_command(
+    project_dir: Annotated[Path, typer.Argument(help="Compiled/prepared project directory.")],
+    phase: Annotated[str, typer.Option("--phase", help="Run phase.")] = "all",
+    force: Annotated[bool, typer.Option("--force", help="Rerun completed runs too.")] = False,
+    python_executable: Annotated[
+        str,
+        typer.Option("--python", help="Python executable used to invoke generated run scripts."),
+    ] = "python",
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run/--execute", help="Plan resume commands or execute them."),
+    ] = True,
+) -> None:
+    """Resume failed or incomplete runs."""
+
+    from idrptm.project import resume_project
+
+    try:
+        if phase not in {"equilibration", "production", "all"}:
+            raise ValueError("Phase must be 'equilibration', 'production', or 'all'.")
+        results = resume_project(
+            project_dir,
+            phase=cast(RunPhase, phase),
+            force=force,
+            dry_run=dry_run,
+            python_executable=python_executable,
+        )
+    except Exception as exc:
+        typer.echo(f"Resume failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    for result in results:
+        command = getattr(result, "command", None)
+        run_dir = getattr(result, "run_dir", None)
+        status = getattr(result, "status", "planned")
+        typer.echo(f"{run_dir}: {status} {command or ''}")
+
+
+@app.command("clean")
+def clean_command(
+    project_dir: Annotated[Path, typer.Argument(help="Compiled/prepared project directory.")],
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Confirm safe cleanup.")] = False,
+) -> None:
+    """Safely remove cache/temp files, never raw trajectories."""
+
+    from idrptm.project import clean_project
+
+    removed = clean_project(project_dir, yes=yes)
+    if not yes:
+        typer.echo("Dry run: pass --yes to remove cache/temp files.")
+        return
+    typer.echo(f"Removed {len(removed)} file(s).")
+
+
+@app.command("list")
+def list_command(
+    project_dir: Annotated[Path, typer.Argument(help="Compiled/prepared project directory.")],
+) -> None:
+    """List runs from the optional SQLite registry."""
+
+    from idrptm.registry import list_runs
+
+    for row in list_runs(project_dir):
+        typer.echo(
+            ",".join(
+                str(row.get(key, ""))
+                for key in ("run_id", "ptm_state", "status", "run_dir")
+            )
+        )
+
+
+@app.command("summary")
+def summary_command(
+    project_dir: Annotated[Path, typer.Argument(help="Compiled/prepared project directory.")],
+) -> None:
+    """Show registry run counts by status."""
+
+    from idrptm.registry import summarize_registry
+
+    for status, count in sorted(summarize_registry(project_dir).items()):
+        typer.echo(f"{status},{count}")
+
+
+@app.command("query")
+def query_command(
+    project_dir: Annotated[Path, typer.Argument(help="Compiled/prepared project directory.")],
+    expression: Annotated[str, typer.Argument(help="Pandas-style query expression.")],
+) -> None:
+    """Query the run registry with a simple expression."""
+
+    from idrptm.registry import query_runs
+
+    for row in query_runs(project_dir, expression):
+        typer.echo(
+            ",".join(
+                str(row.get(key, ""))
+                for key in ("run_id", "ptm_state", "status", "run_dir")
+            )
+        )
 
 
 @app.command("compare")

@@ -51,17 +51,59 @@ tests/                      Import and CLI smoke tests
 The package exposes `pamd` as the primary console script. Legacy `idrptm` and
 `idr-ptm-md` entry points are retained as wrappers.
 
+Scientific parameters should live in YAML configs or Python recipes. CLI flags
+are reserved for execution controls such as `--force`, `--dry-run`, `--phase`,
+and `--all-runs`.
+
+### Minimal YAML
+
+```bash
+pamd compile configs/flk_smoke.yaml --force
+pamd prepare runs/flk_smoke
+pamd run runs/flk_smoke --all-runs --execute
+pamd analyze runs/flk_smoke/runs/<RUN_ID>
+pamd report runs/flk_smoke
+```
+
+`pamd compile` writes `project.lock.yaml`, `config_resolved.json`,
+`storage_estimate.json`, and a manifest preview when sequence resolution is
+available without interactive selection. Downstream commands can target the
+compiled project directory and will use the lock file.
+
+### Python Recipe
+
+```bash
+python recipes/flk_smoke.py
+pamd prepare runs/flk_smoke
+pamd run runs/flk_smoke --all-runs
+```
+
+Recipe files use `protein_analysis_md.recipe.Experiment` and `Protein` to define
+the same scientific parameters as YAML.
+
+### Interactive Wizard
+
+```bash
+pamd wizard
+pamd compile configs/my_project.yaml
+```
+
+The wizard writes a config file only; it does not run MD.
+
 ```bash
 pamd --help
+pamd compile configs/flk_smoke.yaml --force
 pamd search-uniprot FLK --reviewed --organism "Homo sapiens"
 pamd fetch-sequence FLK --reviewed --organism "Homo sapiens" --interactive
-pamd estimate-size configs/flk_smoke.yaml
+pamd estimate-size runs/flk_smoke
 pamd design configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan
 pamd design configs/example_multi_protein.yaml --output-dir runs/example_multi_protein
 pamd design configs/example_cleavage.yaml --output-dir runs/example_cleavage
 pamd prepare configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan
 pamd prepare configs/example_ptm_scan.yaml --output-dir runs/example_ptm_scan --dry-run
-pamd run --config configs/example_ptm_scan.yaml --dry-run
+pamd run runs/example_ptm_scan --all-runs --dry-run
+pamd status runs/example_ptm_scan
+pamd resume runs/example_ptm_scan --dry-run
 pamd analyze runs/example_ptm_scan/runs/phosphorylation_scan_fragment__WT
 pamd compare runs/example_ptm_scan
 pamd report runs/example_ptm_scan
