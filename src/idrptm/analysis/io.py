@@ -87,11 +87,13 @@ def load_calvados_trajectory(
     trajectory: str | Path | None = None,
     engine: Literal["mdtraj", "mdanalysis"] = "mdtraj",
 ) -> TrajectoryData:
-    """Load CALVADOS ``top.pdb`` and ``trajectory.dcd`` with mdtraj or MDAnalysis."""
+    """Load CALVADOS topology and DCD files with mdtraj or MDAnalysis."""
 
     run_path = Path(run_dir)
     topology_path = Path(topology) if topology is not None else run_path / "top.pdb"
-    trajectory_path = Path(trajectory) if trajectory is not None else run_path / "trajectory.dcd"
+    trajectory_path = (
+        Path(trajectory) if trajectory is not None else _default_trajectory_path(run_path)
+    )
     _require_file(topology_path, "topology PDB")
     _require_file(trajectory_path, "trajectory DCD")
 
@@ -179,6 +181,25 @@ def _validate_positions(positions: NDArray[np.float64]) -> None:
             f"Loaded trajectory has unexpected coordinate shape {positions.shape}; "
             "expected (n_frames, n_atoms, 3)."
         )
+
+
+def _default_trajectory_path(run_path: Path) -> Path:
+    expected = run_path / "trajectory.dcd"
+    if expected.is_file():
+        return expected
+    named = run_path / f"{run_path.name}.dcd"
+    if named.is_file():
+        return named
+    candidates = sorted(run_path.glob("*.dcd"))
+    if len(candidates) == 1:
+        return candidates[0]
+    if len(candidates) > 1:
+        names = ", ".join(path.name for path in candidates)
+        raise TrajectoryFileError(
+            f"Multiple trajectory DCD files found in {run_path}: {names}. "
+            "Pass an explicit trajectory path."
+        )
+    return expected
 
 
 def _metadata_or_default(

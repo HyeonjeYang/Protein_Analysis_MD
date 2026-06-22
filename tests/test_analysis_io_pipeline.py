@@ -59,6 +59,31 @@ def test_load_calvados_trajectory_uses_mdtraj_with_expected_files(tmp_path, monk
     assert data.canonical_position_unit == "nm"
 
 
+def test_load_calvados_trajectory_falls_back_to_named_dcd(tmp_path, monkeypatch) -> None:
+    run_dir = tmp_path / "toy_run"
+    run_dir.mkdir()
+    top = run_dir / "top.pdb"
+    dcd = run_dir / "toy_run.dcd"
+    top.write_text("fake top\n", encoding="utf-8")
+    dcd.write_text("fake dcd\n", encoding="utf-8")
+    calls = {}
+
+    def fake_load(trajectory_path: str, top: str):
+        calls["trajectory"] = trajectory_path
+        calls["topology"] = top
+        return SimpleNamespace(
+            xyz=np.zeros((1, 2, 3), dtype=float),
+            time=np.array([0.0]),
+        )
+
+    monkeypatch.setitem(sys.modules, "mdtraj", SimpleNamespace(load=fake_load))
+
+    data = load_calvados_trajectory(run_dir)
+
+    assert calls == {"trajectory": str(dcd), "topology": str(top)}
+    assert data.trajectory_path == dcd
+
+
 def test_load_calvados_trajectory_converts_mdanalysis_angstrom_to_nm(
     tmp_path,
     monkeypatch,

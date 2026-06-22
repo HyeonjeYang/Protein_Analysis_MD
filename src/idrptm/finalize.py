@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import csv
+import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from idrptm.schema import load_config
@@ -75,6 +77,15 @@ def finalize_project(
     from idrptm.dashboard import generate_dashboard
 
     dashboard = generate_dashboard(root)
+    _write_pipeline_status(
+        root,
+        analyzed=tuple(analyzed),
+        skipped=skipped,
+        comparison_dir=comparison.output_dir,
+        report_path=report_path,
+        pymol_dir=pymol_dir,
+        dashboard_path=dashboard.index_html,
+    )
 
     return FinalizeResult(
         project_dir=root,
@@ -131,3 +142,30 @@ def _run_dirs(root: Path) -> tuple[Path, ...]:
     if runs_root.exists():
         return tuple(sorted(path for path in runs_root.iterdir() if path.is_dir()))
     return ()
+
+
+def _write_pipeline_status(
+    root: Path,
+    *,
+    analyzed: tuple[Path, ...],
+    skipped: tuple[Path, ...],
+    comparison_dir: Path,
+    report_path: Path | None,
+    pymol_dir: Path | None,
+    dashboard_path: Path | None,
+) -> None:
+    payload = {
+        "stage": "finalize",
+        "status": "completed",
+        "ended_at": datetime.now(timezone.utc).isoformat(),
+        "analyzed_runs": [str(path.relative_to(root)) for path in analyzed],
+        "skipped_analysis": len(skipped),
+        "comparison": str(comparison_dir),
+        "report": str(report_path) if report_path is not None else None,
+        "pymol": str(pymol_dir) if pymol_dir is not None else None,
+        "dashboard": str(dashboard_path) if dashboard_path is not None else None,
+    }
+    (root / "pipeline_status.json").write_text(
+        json.dumps(payload, indent=2) + "\n",
+        encoding="utf-8",
+    )
