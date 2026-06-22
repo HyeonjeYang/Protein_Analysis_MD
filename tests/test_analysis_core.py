@@ -85,6 +85,8 @@ def test_internal_distance_scaling_on_linear_chain() -> None:
 
     assert scaling["s"].tolist() == [1, 2]
     assert scaling["distance"].tolist() == pytest.approx([1.5, 3.0])
+    assert scaling["mean_square_distance_nm2"].tolist() == pytest.approx([2.5, 9.0])
+    assert scaling["rms_distance_nm"].tolist() == pytest.approx([np.sqrt(2.5), 3.0])
     assert scaling["n_pairs"].tolist() == [2, 1]
 
 

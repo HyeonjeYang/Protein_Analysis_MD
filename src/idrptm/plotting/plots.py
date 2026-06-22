@@ -1,7 +1,11 @@
 """Figure-generation helpers for reports."""
 
+# ruff: noqa: I001
+
 from __future__ import annotations
 
+import os
+from collections.abc import Iterable
 from pathlib import Path
 
 import matplotlib
@@ -13,17 +17,60 @@ import numpy as np
 import pandas as pd
 
 
-def save_figure(fig: plt.Figure, output_base: str | Path) -> tuple[Path, Path]:
-    """Save a Matplotlib figure as PNG and PDF."""
+SUPPORTED_FIGURE_FORMATS = {"png", "pdf"}
+
+
+def figure_formats(formats: Iterable[str] | str | None = None) -> tuple[str, ...]:
+    """Resolve report figure formats.
+
+    PNG is always written so local reports and dashboards have a lightweight,
+    browser-friendly artifact. Set ``PAMD_FIGURE_FORMATS=png,pdf`` to also
+    write PDF files.
+    """
+
+    raw_formats: Iterable[str] | str
+    raw_formats = os.environ.get("PAMD_FIGURE_FORMATS", "png") if formats is None else formats
+    if isinstance(raw_formats, str):
+        tokens = [item.strip().lower() for item in raw_formats.split(",") if item.strip()]
+    else:
+        tokens = [str(item).strip().lower() for item in raw_formats if str(item).strip()]
+    if not tokens:
+        tokens = ["png"]
+
+    resolved: list[str] = []
+    for token in tokens:
+        if token not in SUPPORTED_FIGURE_FORMATS:
+            supported = ", ".join(sorted(SUPPORTED_FIGURE_FORMATS))
+            raise ValueError(
+                f"Unsupported figure format '{token}'. Supported formats: {supported}."
+            )
+        if token not in resolved:
+            resolved.append(token)
+    if "png" in resolved:
+        resolved.remove("png")
+    return ("png", *resolved)
+
+
+def save_figure(
+    fig: plt.Figure,
+    output_base: str | Path,
+    *,
+    formats: Iterable[str] | str | None = None,
+) -> tuple[Path, ...]:
+    """Save a Matplotlib figure as PNG by default, with optional extra formats."""
 
     base = Path(output_base)
     base.parent.mkdir(parents=True, exist_ok=True)
-    png = base.with_suffix(".png")
-    pdf = base.with_suffix(".pdf")
-    fig.savefig(png, dpi=200, bbox_inches="tight")
-    fig.savefig(pdf, bbox_inches="tight")
+    paths: list[Path] = []
+    for figure_format in figure_formats(formats):
+        output_path = base.with_suffix(f".{figure_format}")
+        if figure_format == "png":
+            fig.savefig(output_path, dpi=200, bbox_inches="tight")
+        else:
+            fig.savefig(output_path, bbox_inches="tight")
+        paths.append(output_path)
     plt.close(fig)
-    return png, pdf
+    return tuple(paths)
 
 
 def plot_distribution(

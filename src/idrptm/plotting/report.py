@@ -195,6 +195,21 @@ def generate_report(project_dir: str | Path, output_dir: str | Path | None = Non
             figures / "rs",
         )
     )
+    if "mean_square_distance_mean" in scaling_aggregate:
+        figure_paths.extend(
+            save_figure(
+                plot_lines(
+                    scaling_aggregate,
+                    "s",
+                    "mean_square_distance_mean",
+                    "<R^2(s)> (nm^2)",
+                    "Mean-square internal distance <R^2(s)>",
+                    show_raw_points=False,
+                    show_smoothed_line=False,
+                ),
+                figures / "r2s",
+            )
+        )
     figure_paths.extend(
         save_figure(plot_ptm_sites(manifest), figures / "ptm_sites")
     )
@@ -240,8 +255,15 @@ def _scaling_aggregate(runs: tuple[object, ...]) -> pd.DataFrame:
     for run in runs:
         raw_column = "mean_distance_nm" if "mean_distance_nm" in run.scaling else "distance"
         columns = ["s", raw_column]
-        if "mean_distance_nm_smooth" in run.scaling:
-            columns.append("mean_distance_nm_smooth")
+        columns.extend(
+            column
+            for column in (
+                "mean_distance_nm_smooth",
+                "mean_square_distance_nm2",
+                "rms_distance_nm",
+            )
+            if column in run.scaling
+        )
         table = run.scaling[columns].copy()
         table = table.rename(columns={raw_column: "distance"})
         table["condition"] = run.condition
@@ -259,6 +281,14 @@ def _scaling_aggregate(runs: tuple[object, ...]) -> pd.DataFrame:
             smooth_values = group["mean_distance_nm_smooth"].dropna()
             if len(smooth_values):
                 row["distance_smooth_mean"] = float(smooth_values.mean())
+        if "mean_square_distance_nm2" in group:
+            square_values = group["mean_square_distance_nm2"].dropna()
+            if len(square_values):
+                row["mean_square_distance_mean"] = float(square_values.mean())
+        if "rms_distance_nm" in group:
+            rms_values = group["rms_distance_nm"].dropna()
+            if len(rms_values):
+                row["rms_distance_mean"] = float(rms_values.mean())
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -738,7 +768,10 @@ def _decomposition_figures(
 
 
 def _artifact_figures(artifact: VisualizationArtifact) -> list[Path]:
-    return [artifact.png, artifact.pdf]
+    paths = [artifact.png]
+    if artifact.pdf is not None:
+        paths.append(artifact.pdf)
+    return paths
 
 
 def _smoothing_report_line(smoothing: dict[str, object]) -> str:

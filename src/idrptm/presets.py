@@ -403,7 +403,7 @@ REPORT_PRESETS: dict[ReportPresetName, dict[str, Any]] = {
         },
     },
     "standard": {
-        "formats": ["png", "pdf"],
+        "formats": ["png"],
         "html": False,
         "plots": {
             "single_chain": True,

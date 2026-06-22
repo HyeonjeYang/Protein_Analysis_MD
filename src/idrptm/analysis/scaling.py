@@ -26,7 +26,7 @@ class FloryFit:
 
 
 def internal_distance_scaling(positions: ArrayLike) -> pd.DataFrame:
-    """Return mean internal distance ``R(s)`` by sequence separation."""
+    """Return internal-distance scaling metrics by sequence separation."""
 
     trajectory = as_position_trajectory(positions)
     n_residues = trajectory.shape[1]
@@ -42,6 +42,8 @@ def internal_distance_scaling(positions: ArrayLike) -> pd.DataFrame:
             "s": separation,
             "distance": float(np.mean(values)),
             "mean_distance_nm": float(np.mean(values)),
+            "rms_distance_nm": float(np.sqrt(np.mean(np.square(values)))),
+            "mean_square_distance_nm2": float(np.mean(np.square(values))),
             "std_distance_nm": float(np.std(values, ddof=1)) if len(values) > 1 else 0.0,
             "n_pairs": len(values),
         }
@@ -49,7 +51,15 @@ def internal_distance_scaling(positions: ArrayLike) -> pd.DataFrame:
     ]
     return pd.DataFrame(
         rows,
-        columns=["s", "distance", "mean_distance_nm", "std_distance_nm", "n_pairs"],
+        columns=[
+            "s",
+            "distance",
+            "mean_distance_nm",
+            "rms_distance_nm",
+            "mean_square_distance_nm2",
+            "std_distance_nm",
+            "n_pairs",
+        ],
     )
 
 

@@ -145,7 +145,7 @@ def test_compare_project_aggregates_replicates_and_deltas(tmp_path) -> None:
     assert (tmp_path / "comparison" / "delta_contact_map_pSer2_minus_WT.npy").exists()
 
 
-def test_generate_report_writes_markdown_and_png_pdf_figures(tmp_path) -> None:
+def test_generate_report_writes_markdown_and_png_figures_by_default(tmp_path) -> None:
     _write_project(tmp_path)
 
     report = generate_report(tmp_path)
@@ -156,8 +156,19 @@ def test_generate_report_writes_markdown_and_png_pdf_figures(tmp_path) -> None:
     assert "Delta Contact Map Pser2" in text
     figure_names = {path.name for path in report.figure_paths}
     assert "rg_distribution.png" in figure_names
-    assert "rg_distribution.pdf" in figure_names
     assert "delta_contact_map_pSer2.png" in figure_names
-    assert "delta_contact_map_pSer2.pdf" in figure_names
     assert "summary_table.png" in figure_names
+    assert not any(name.endswith(".pdf") for name in figure_names)
+
+
+def test_generate_report_can_write_pdf_when_requested(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PAMD_FIGURE_FORMATS", "png,pdf")
+    _write_project(tmp_path)
+
+    report = generate_report(tmp_path)
+
+    figure_names = {path.name for path in report.figure_paths}
+    assert "rg_distribution.png" in figure_names
+    assert "rg_distribution.pdf" in figure_names
+    assert "delta_contact_map_pSer2.pdf" in figure_names
     assert "summary_table.pdf" in figure_names

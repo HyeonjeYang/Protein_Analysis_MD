@@ -33,14 +33,21 @@ def _contact_map() -> np.ndarray:
     return np.array([[0.0, 0.2, 0.1], [0.2, 0.0, 0.4], [0.1, 0.4, 0.0]])
 
 
-def test_rg_ree_plots_and_artifact_save(tmp_path) -> None:
+def test_rg_ree_plots_and_artifact_save(tmp_path, monkeypatch) -> None:
     table = rg_ree_plotting_data(_rg(), _ree())
     fig = plot_rg_ree_hexbin(_rg(), _ree())
     artifact = save_visualization(fig, table, tmp_path / "rg_ree")
 
     assert artifact.png.is_file()
-    assert artifact.pdf.is_file()
+    assert artifact.pdf is None
     assert artifact.data.is_file()
+
+    monkeypatch.setenv("PAMD_FIGURE_FORMATS", "png,pdf")
+    fig = plot_rg_ree_hexbin(_rg(), _ree())
+    artifact = save_visualization(fig, table, tmp_path / "rg_ree_with_pdf")
+    assert artifact.png.is_file()
+    assert artifact.pdf is not None
+    assert artifact.pdf.is_file()
 
     fig = plot_rg_ree_timeseries(_rg(), _ree())
     assert fig.axes

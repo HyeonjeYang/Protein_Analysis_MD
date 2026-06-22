@@ -23,7 +23,7 @@ class VisualizationArtifact:
     """Paths written for one visualization."""
 
     png: Path
-    pdf: Path
+    pdf: Path | None
     data: Path
     metadata: Path | None = None
 
@@ -35,9 +35,11 @@ def save_visualization(
     *,
     metadata: dict[str, object] | None = None,
 ) -> VisualizationArtifact:
-    """Save PNG/PDF plus underlying plotting data without overwriting raw analysis data."""
+    """Save figure plus underlying plotting data without overwriting raw analysis data."""
 
-    png, pdf = save_figure(fig, output_base)
+    figure_paths = save_figure(fig, output_base)
+    png = next(path for path in figure_paths if path.suffix == ".png")
+    pdf = next((path for path in figure_paths if path.suffix == ".pdf"), None)
     base = Path(output_base)
     if isinstance(data, pd.DataFrame):
         data_path = base.with_suffix(".csv")

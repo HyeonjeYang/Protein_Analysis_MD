@@ -14,7 +14,7 @@ Developed by Present0206 with implementation help from Codex.
 - Does not implement, vendor, fork, patch, or redistribute CALVADOS/OpenMM.
 - Supports MVP phosphorylation states: WT, pSer, and pThr.
 - Supports pre-cleaved sequence states and fragment-mixture setup.
-- Includes analysis and figures for Rg, Ree, contacts, P(s), R(s), MSD,
+- Includes analysis and figures for Rg, Ree, contacts, P(s), R(s), `<R^2(s)>`, MSD,
   lifetimes, PCA/decomposition, and comparison workflows.
 - Provides local/HPC scaffolding, tmux-friendly local launch, PyMOL export, and
   a local static HTML dashboard.
@@ -60,6 +60,9 @@ pamd pymol runs/<PROJECT_DIR>
 pamd pack runs/<PROJECT_DIR>
 pamd repo-check
 ```
+
+Reports write PNG figures by default. Set `PAMD_FIGURE_FORMATS=png,pdf` before
+`pamd report` or `pamd finalize` if PDF copies are needed.
 
 ## Documentation
 
